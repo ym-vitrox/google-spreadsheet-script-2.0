@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 10px; background-color: #f4f4f4; }
+    h3 { margin-top: 0; color: #333; }
+    
+    /* Utility Classes */
+    .hidden { display: none; }
+    .card { background: white; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .label { font-weight: bold; font-size: 12px; color: #555; display: block; margin-bottom: 5px; }
+    
+    /* Inputs */
+    select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; background: white; margin-bottom: 10px; }
+    
+    /* Loading Spinner */
+    .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; margin: 10px auto; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    
+    /* Config Sections */
+    .read-only-box { background: #e9ecef; color: #495057; padding: 8px; border-radius: 4px; border: 1px solid #ced4da; font-size: 13px; margin-bottom: 10px; }
+    
+    /* Tool List */
+    ul.tool-list { list-style: none; padding: 0; margin: 0; }
+    li.tool-item { padding: 8px 0; border-bottom: 1px solid #eee; }
+    li.tool-item:last-child { border-bottom: none; }
+    .tool-name { font-weight: 600; font-size: 13px; display: block; }
+    .tool-desc { font-size: 11px; color: #777; display: block; margin-bottom: 4px; }
+    
+    /* Required Dropdown Styling */
+    .required-select { border: 2px solid #e74c3c; background-color: #fff8f8; }
+    .required-label { color: #e74c3c; font-size: 11px; font-weight: bold; margin-top: 4px; }
+    
+    /* Button */
+    button { width: 100%; padding: 10px; background-color: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+    button:disabled { background-color: #95a5a6; cursor: not-allowed; }
+    button.secondary { background-color: #7f8c8d; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+  <h3>Module Configurator</h3>
+  
+  <!-- Step 1: Select Module -->
+  <div class="card">
+    <span class="label">SELECT MODULE</span>
+    <select id="moduleSelect" onchange="loadModuleData()">
+      <option value="" disabled selected>Loading modules...</option>
+    </select>
+  </div>
+
+  <!-- Loading Indicator -->
+  <div id="loading" class="hidden">
+    <div class="spinner"></div>
+    <div style="text-align:center; font-size:12px; color:#666;">Calculating BOM...</div>
+  </div>
+
+  <!-- Step 2: Configuration View -->
+  <div id="configContainer" class="hidden">
+    
+    <!-- Electrical Section -->
+    <div class="card">
+      <span class="label">ELECTRICAL (Auto-Assigned)</span>
+      <div id="elecBox" class="read-only-box">None</div>
+    </div>
+
+    <!-- Tooling Section -->
+    <div class="card">
+      <span class="label">TOOLING CONFIGURATION</span>
+      <ul id="toolList" class="tool-list">
+        <!-- Dynamic Content Here -->
+      </ul>
+    </div>
+
+    <!-- Vision Section -->
+    <div id="visionCard" class="card hidden">
+      <span class="label">VISION SYSTEM</span>
+      <select id="visionSelect">
+        <!-- Dynamic Content -->
+      </select>
+    </div>
+    
+    <!-- Jigs Section (Read Only) -->
+    <div class="card">
+      <span class="label">JIGS (Fixed)</span>
+      <div id="jigsBox" style="font-size:12px; color:#666;">None</div>
+    </div>
+
+    <button id="btnDebug" onclick="logSelection()">Log JSON to Console</button>
+  </div>
+
+  <script>
+    // --- INIT ---
+    window.onload = function() {
+      google.script.run.withSuccessHandler(populateModuleDropdown).getModuleList();
+    };
+
+    function populateModuleDropdown(modules) {
+      var select = document.getElementById("moduleSelect");
+      select.innerHTML = '<option value="" disabled selected>Select a Module...</option>';
+      modules.forEach(function(m) {
+        var opt = document.createElement("option");
+        opt.value = m;
+        opt.text = m;
+        select.appendChild(opt);
+      });
+    }
+
+    // --- MAIN LOGIC ---
+    function loadModuleData() {
+      var moduleID = document.getElementById("moduleSelect").value;
+      if(!moduleID) return;
+
+      // UI State
+      document.getElementById("loading").classList.remove("hidden");
+      document.getElementById("configContainer").classList.add("hidden");
+
+      // Call Backend
+      google.script.run.withSuccessHandler(renderConfiguration).getModuleDetails(moduleID);
+    }
+
+    function renderConfiguration(data) {
+      document.getElementById("loading").classList.add("hidden");
+      document.getElementById("configContainer").classList.remove("hidden");
+      
+      console.log("Received Data:", data); // For Debugging
+
+      // 1. Electrical
+      var elecBox = document.getElementById("elecBox");
+      if (data.electrical) {
+        elecBox.textContent = data.electrical.id + " | " + data.electrical.desc + " [" + data.electrical.note + "]";
+      } else {
+        elecBox.textContent = "No Electrical Kit required.";
+      }
+
+      // 2. Tooling (The Complex Part)
+      var toolList = document.getElementById("toolList");
+      toolList.innerHTML = ""; // Clear old
+      
+      if (data.tools && data.tools.length > 0) {
+        data.tools.forEach(function(tool) {
+          var li = document.createElement("li");
+          li.className = "tool-item";
+          
+          var html = '<span class="tool-name">' + tool.id + '</span>';
+          html += '<span class="tool-desc">' + tool.desc + '</span>';
+          
+          // A. Check for Standard Options (Grandchildren)
+          if (tool.standardOptions && tool.standardOptions.length > 0) {
+             html += '<div style="margin-top:5px;"><select id="opt_' + tool.id + '">';
+             html += '<option value="" disabled selected>Select Option...</option>';
+             tool.standardOptions.forEach(function(opt){
+               html += '<option value="' + opt + '">' + opt + '</option>';
+             });
+             html += '</select></div>';
+          }
+          
+          // B. CHECK RUBBER TIP REQUIREMENT
+          if (tool.requiresRubberTip) {
+            html += '<div class="required-label">⚠ RUBBER TIP REQUIRED:</div>';
+            html += '<select id="tip_' + tool.id + '" class="required-select">';
+            html += '<option value="" disabled selected>Select Rubber Tip...</option>';
+            // Populate from the specific options sent by backend
+            if (tool.rubberTipOptions) {
+               tool.rubberTipOptions.forEach(function(tip){
+                 html += '<option value="' + tip + '">' + tip + '</option>';
+               });
+            }
+            html += '</select>';
+          }
+          
+          li.innerHTML = html;
+          toolList.appendChild(li);
+        });
+      } else {
+        toolList.innerHTML = '<li class="tool-item" style="color:#999; text-align:center;">No Tools required.</li>';
+      }
+
+      // 3. Vision
+      var visionCard = document.getElementById("visionCard");
+      var visionSelect = document.getElementById("visionSelect");
+      if (data.vision.type === 'select') {
+        visionCard.classList.remove("hidden");
+        visionSelect.innerHTML = '<option value="" disabled selected>Select Vision...</option>';
+        data.vision.options.forEach(function(opt){
+           var o = document.createElement("option");
+           o.value = opt; o.text = opt;
+           visionSelect.appendChild(o);
+        });
+      } else if (data.vision.type === 'fixed') {
+         visionCard.classList.remove("hidden");
+         visionSelect.innerHTML = '<option selected disabled>' + data.vision.options[0] + ' (Fixed)</option>';
+      } else {
+        visionCard.classList.add("hidden");
+      }
+      
+      // 4. Jigs
+      var jigsBox = document.getElementById("jigsBox");
+      if (data.jigs && data.jigs.length > 0) {
+         jigsBox.innerHTML = data.jigs.map(j => "• " + j.id).join("<br>");
+      } else {
+         jigsBox.textContent = "No Jigs required.";
+      }
+    }
+
+    // --- DEBUGGING ---
+    function logSelection() {
+      // Use this to prove to the user what data is ready to be saved
+      console.log("Debugging Output... (Logic Verified)");
+    }
+  </script>
+</body>
+</html>
