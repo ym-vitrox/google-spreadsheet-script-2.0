@@ -148,7 +148,11 @@
              html += '<select id="opt_' + tool.id + '" style="margin-top:4px;">';
              html += '<option value="" disabled selected>Select Option...</option>';
              tool.standardOptions.forEach(function(opt){
-               html += '<option value="' + opt + '">' + opt + '</option>';
+               // opt is now an OBJECT: {id, desc}
+               var displayText = opt.id;
+               if(opt.desc) displayText += " | " + opt.desc;
+               
+               html += '<option value="' + opt.id + '">' + displayText + '</option>';
              });
              html += '</select>';
           }
@@ -160,7 +164,11 @@
             html += '<option value="" disabled selected>Select Rubber Tip...</option>';
             if (tool.rubberTipOptions) {
                tool.rubberTipOptions.forEach(function(tip){
-                 html += '<option value="' + tip + '">' + tip + '</option>';
+                 // tip is now an OBJECT: {id, desc}
+                 var displayText = tip.id;
+                 if(tip.desc) displayText += " | " + tip.desc;
+
+                 html += '<option value="' + tip.id + '">' + displayText + '</option>';
                });
             }
             html += '</select>';
