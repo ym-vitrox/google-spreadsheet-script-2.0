@@ -39,6 +39,9 @@
     button { width: 100%; padding: 10px; background-color: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 10px; }
     button:hover { background-color: #219150; }
     button#btnClose { background-color: #95a5a6; margin-top: 5px; }
+    
+    /* OptGroup Styling (Optional, browser dependent) */
+    optgroup { font-weight: bold; color: #2c3e50; }
   </style>
 </head>
 <body>
@@ -147,13 +150,10 @@
           if (tool.standardOptions && tool.standardOptions.length > 0) {
              html += '<select id="opt_' + tool.id + '" style="margin-top:4px;">';
              html += '<option value="" disabled selected>Select Option...</option>';
-             tool.standardOptions.forEach(function(opt){
-               // opt is now an OBJECT: {id, desc}
-               var displayText = opt.id;
-               if(opt.desc) displayText += " | " + opt.desc;
-               
-               html += '<option value="' + opt.id + '">' + displayText + '</option>';
-             });
+             
+             // Build Categorized Options
+             html += buildCategorizedOptions(tool.standardOptions);
+             
              html += '</select>';
           }
           
@@ -162,14 +162,10 @@
             html += '<span class="alert-label">⚠ SELECTION REQUIRED:</span>';
             html += '<select id="tip_' + tool.id + '" class="required-select">';
             html += '<option value="" disabled selected>Select Rubber Tip...</option>';
+            
             if (tool.rubberTipOptions) {
-               tool.rubberTipOptions.forEach(function(tip){
-                 // tip is now an OBJECT: {id, desc}
-                 var displayText = tip.id;
-                 if(tip.desc) displayText += " | " + tip.desc;
-
-                 html += '<option value="' + tip.id + '">' + displayText + '</option>';
-               });
+               // Build Categorized Options
+               html += buildCategorizedOptions(tool.rubberTipOptions);
             }
             html += '</select>';
           }
@@ -210,6 +206,45 @@
       } else {
          jigsBox.textContent = "No Jigs required.";
       }
+    }
+    
+    /**
+     * Helper to Generate <optgroup> HTML
+     */
+    function buildCategorizedOptions(optionsArray) {
+       var html = "";
+       var currentCategory = null;
+       var isGroupOpen = false;
+       
+       optionsArray.forEach(function(opt) {
+          // If category changes, handle groups
+          if (opt.category !== currentCategory) {
+             // Close previous group if open
+             if (isGroupOpen) {
+                html += '</optgroup>';
+                isGroupOpen = false;
+             }
+             
+             // Open new group if category exists
+             if (opt.category) {
+                html += '<optgroup label="' + opt.category + '">';
+                isGroupOpen = true;
+             }
+             currentCategory = opt.category;
+          }
+          
+          var displayText = opt.id;
+          if(opt.desc) displayText += " | " + opt.desc;
+          
+          html += '<option value="' + opt.id + '">' + displayText + '</option>';
+       });
+       
+       // Close final group
+       if (isGroupOpen) {
+          html += '</optgroup>';
+       }
+       
+       return html;
     }
 
     function logSelection() {
