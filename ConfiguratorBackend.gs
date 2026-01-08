@@ -168,13 +168,31 @@ function getModuleDetails(moduleID) {
 function fetchOptionsForTool(menuData, parentID) {
   var options = [];
   var foundParent = false;
+
   for (var i = 0; i < menuData.length; i++) {
     var rowParent = String(menuData[i][0]);
-    var rowChild = String(menuData[i][1]);
+    var rowChild = String(menuData[i][1]); // This now contains "ID :: Desc"
+
     if (rowParent === parentID) {
       foundParent = true;
-      if (rowChild && rowChild.indexOf("---") === -1) options.push(rowChild);
+      if (rowChild && rowChild.indexOf("---") === -1) {
+        
+        // UNPACK LOGIC
+        // We look for the delimiter "::"
+        var parts = rowChild.split('::');
+        var id = parts[0].trim();
+        var desc = "";
+        
+        if (parts.length > 1) {
+           desc = parts[1].trim();
+        }
+        
+        // Push an OBJECT, not just a string
+        options.push({ id: id, desc: desc }); 
+      }
     } else if (foundParent) {
+      // If we were finding the parent but now rowParent is empty/different (and not just an empty cell in a contiguous block), stop.
+      // Logic from before: "if (rowParent !== "") break;" means if we hit a NEW parent, stop.
       if (rowParent !== "") break; 
     }
   }
