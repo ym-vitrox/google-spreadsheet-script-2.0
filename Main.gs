@@ -232,6 +232,7 @@ function processToolingOptions(sourceSS, refSheet) {
   if (!toolingSheet) return;
   
   var lastRow = toolingSheet.getLastRow();
+  // Fetch Cols A to H (Index 1 to 8)
   var rawData = toolingSheet.getRange(1, 1, lastRow, 8).getValues();
   var databaseOutput = [];
   var currentParentID = null;
@@ -240,14 +241,15 @@ function processToolingOptions(sourceSS, refSheet) {
   for (var i = 0; i < rawData.length; i++) {
     var colA = String(rawData[i][0]).trim();
     var colB = String(rawData[i][1]).trim();
-    var colF = String(rawData[i][5]).trim();
-    var colH = String(rawData[i][7]).trim();
+    var colF = String(rawData[i][5]).trim(); // Child ID
+    var colH = String(rawData[i][7]).trim(); // Description
     var match = colA.match(/\[(.*?)\]/);
     
     if (match && match[1]) { currentParentID = match[1]; currentCategory = null; }
     if (colB !== "") { currentCategory = colB; }
     
     if (currentParentID && colF !== "" && colF !== "Part ID") {
+      // 0: Parent, 1: ChildID, 2: Category, 3: Description
       databaseOutput.push([currentParentID, colF, (currentCategory || ""), colH]);
     }
   }
@@ -263,7 +265,11 @@ function processToolingOptions(sourceSS, refSheet) {
     for (var k = 0; k < databaseOutput.length; k++) {
       var pID = databaseOutput[k][0];
       if (!grouped[pID]) { grouped[pID] = []; orderParents.push(pID); }
-      grouped[pID].push({ partId: databaseOutput[k][1], cat: databaseOutput[k][2] });
+      grouped[pID].push({ 
+        partId: databaseOutput[k][1], 
+        cat: databaseOutput[k][2],
+        desc: databaseOutput[k][3] // Capture Description
+      });
     }
     
     for (var p = 0; p < orderParents.length; p++) {
@@ -274,10 +280,15 @@ function processToolingOptions(sourceSS, refSheet) {
         var itm = items[m];
         var thisCat = itm.cat;
         if (thisCat !== "" && thisCat !== lastCat) { 
+          // Headers don't have descriptions, just use standard format
           menuOutput.push([parent, "--- " + thisCat + " ---"]); 
           lastCat = thisCat; 
         }
-        menuOutput.push([parent, itm.partId]);
+        
+        // PACKING STRATEGY: "ID :: Description"
+        // This keeps the column structure intact (Cols U, V) but passes rich data.
+        var packedValue = itm.partId + " :: " + (itm.desc || "");
+        menuOutput.push([parent, packedValue]);
       }
     }
   }
