@@ -168,31 +168,43 @@ function getModuleDetails(moduleID) {
 function fetchOptionsForTool(menuData, parentID) {
   var options = [];
   var foundParent = false;
+  var currentCategory = "Standard Options"; // Default Category
 
   for (var i = 0; i < menuData.length; i++) {
     var rowParent = String(menuData[i][0]);
-    var rowChild = String(menuData[i][1]); // This now contains "ID :: Desc"
+    var rowChild = String(menuData[i][1]); // This now contains "ID :: Desc" OR "--- CATEGORY ---"
 
     if (rowParent === parentID) {
       foundParent = true;
-      if (rowChild && rowChild.indexOf("---") === -1) {
+      if (rowChild) {
         
-        // UNPACK LOGIC
-        // We look for the delimiter "::"
-        var parts = rowChild.split('::');
-        var id = parts[0].trim();
-        var desc = "";
-        
-        if (parts.length > 1) {
-           desc = parts[1].trim();
+        // 1. Check for Category Header (e.g., "--- PUH INTERFACE - RUBBER TIP ---")
+        if (rowChild.indexOf("---") > -1) {
+           // Extract text between dashes. 
+           // Example: "--- MY CATEGORY ---" -> "MY CATEGORY"
+           currentCategory = rowChild.replace(/---/g, '').trim();
+        } 
+        // 2. Otherwise, treat as an Option Item
+        else {
+           // UNPACK LOGIC ("ID :: Desc")
+           var parts = rowChild.split('::');
+           var id = parts[0].trim();
+           var desc = "";
+           
+           if (parts.length > 1) {
+              desc = parts[1].trim();
+           }
+           
+           // Push OBJECT with Category
+           options.push({ 
+             id: id, 
+             desc: desc,
+             category: currentCategory 
+           }); 
         }
-        
-        // Push an OBJECT, not just a string
-        options.push({ id: id, desc: desc }); 
       }
     } else if (foundParent) {
-      // If we were finding the parent but now rowParent is empty/different (and not just an empty cell in a contiguous block), stop.
-      // Logic from before: "if (rowParent !== "") break;" means if we hit a NEW parent, stop.
+      // If we were finding the parent but now rowParent is different (and not just empty), stop.
       if (rowParent !== "") break; 
     }
   }
