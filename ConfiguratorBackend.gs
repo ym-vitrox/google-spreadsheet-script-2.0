@@ -168,45 +168,99 @@ function getModuleDetails(moduleID) {
 function fetchOptionsForTool(menuData, parentID) {
   var options = [];
   var foundParent = false;
-  var currentCategory = "Standard Options"; // Default Category
+  var currentCategory = "Standard Options"; 
 
   for (var i = 0; i < menuData.length; i++) {
     var rowParent = String(menuData[i][0]);
-    var rowChild = String(menuData[i][1]); // This now contains "ID :: Desc" OR "--- CATEGORY ---"
+    var rowChild = String(menuData[i][1]); 
 
     if (rowParent === parentID) {
       foundParent = true;
       if (rowChild) {
-        
-        // 1. Check for Category Header (e.g., "--- PUH INTERFACE - RUBBER TIP ---")
         if (rowChild.indexOf("---") > -1) {
-           // Extract text between dashes. 
-           // Example: "--- MY CATEGORY ---" -> "MY CATEGORY"
            currentCategory = rowChild.replace(/---/g, '').trim();
         } 
-        // 2. Otherwise, treat as an Option Item
         else {
-           // UNPACK LOGIC ("ID :: Desc")
            var parts = rowChild.split('::');
            var id = parts[0].trim();
            var desc = "";
+           if (parts.length > 1) desc = parts[1].trim();
            
-           if (parts.length > 1) {
-              desc = parts[1].trim();
-           }
-           
-           // Push OBJECT with Category
-           options.push({ 
-             id: id, 
-             desc: desc,
-             category: currentCategory 
-           }); 
+           options.push({ id: id, desc: desc, category: currentCategory }); 
         }
       }
     } else if (foundParent) {
-      // If we were finding the parent but now rowParent is different (and not just empty), stop.
       if (rowParent !== "") break; 
     }
   }
   return options;
+}
+
+/**
+ * 3. SAVE CONFIGURATION TO TRIAL LAYOUT
+ * Scans for first empty slot between B10 and B32.
+ */
+function saveConfiguration(payload) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
+  if (!sheet) throw new Error("Sheet 'TRIAL-LAYOUT CONFIGURATION' not found.");
+
+  // Get data for scanning: Col G (Slot IDs) and Col H (Descriptions)
+  // Assuming headers are top rows, we grab mostly everything
+  var lastRow = sheet.getLastRow();
+  // Fetch G:H. Index 1 = Col G, Index 2 = Col H in the resulting 2D array
+  var scanRange = sheet.getRange(1, 7, lastRow, 2).getValues();
+
+  var targetRowIndex = -1;
+  var foundSlotLabel = "";
+  var startScanning = false;
+
+  for (var i = 0; i < scanRange.length; i++) {
+    var slotID = String(scanRange[i][0]).trim(); // Col G
+    var desc = String(scanRange[i][1]).trim();   // Col H
+
+    // START Condition
+    if (slotID === "B10") {
+      startScanning = true;
+    }
+
+    // CHECK Condition (Only if started)
+    if (startScanning) {
+      // STOP Condition
+      if (slotID === "B33" || (slotID.indexOf("B") === 0 && parseInt(slotID.substring(1)) > 32)) {
+         break; // Went past B32
+      }
+
+      // EMPTY DETECT
+      // We consider it empty if Description is empty or just dashes "---"
+      if (desc === "" || desc === "---") {
+        targetRowIndex = i + 1; // 1-based index
+        foundSlotLabel = slotID;
+        break; // Found it!
+      }
+    }
+  }
+
+  if (targetRowIndex === -1) {
+    throw new Error("Configuration List (B10-B32) is full. Please clear some rows.");
+  }
+
+  // --- WRITE DATA ---
+  // Col H (8)  : Description
+  // Col K (11) : Module ID
+  // Col L (12) : Elec ID
+  // Col M (13) : Vision ID
+  // Col N (14) : Tool Option ID
+  // Col O (15) : Rubber Tip ID
+  // Col P (16) : Jig ID
+
+  sheet.getRange(targetRowIndex, 8).setValue(payload.moduleDesc);
+  sheet.getRange(targetRowIndex, 11).setValue(payload.moduleID);
+  sheet.getRange(targetRowIndex, 12).setValue(payload.elecID);
+  sheet.getRange(targetRowIndex, 13).setValue(payload.visionID);
+  sheet.getRange(targetRowIndex, 14).setValue(payload.toolOptionID);
+  sheet.getRange(targetRowIndex, 15).setValue(payload.rubberTipID);
+  sheet.getRange(targetRowIndex, 16).setValue(payload.jigID);
+
+  return { status: "success", slot: foundSlotLabel };
 }
