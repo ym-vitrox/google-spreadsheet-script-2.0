@@ -91,10 +91,9 @@ function runMasterSync() {
     // C. PROCESS TOOLING OPTIONS (Cols P:V)
     processToolingOptions(sourceSS, refSheet);
 
-    // D. PROCESS VISION DATA (Cols AF:AH)
-    processVisionData(sourceSheet, refSheet);
+    // D. PROCESS VISION DATA REMOVED (Cols AF:AK No longer used)
     
-    ui.alert("Sync Complete", "REF_DATA has been updated.\n(ORDERING LIST was not touched)", ui.ButtonSet.OK);
+    ui.alert("Sync Complete", "REF_DATA has been updated.", ui.ButtonSet.OK);
   } catch (e) {
     console.error(e);
     ui.alert("Error during Sync", e.message, ui.ButtonSet.OK);
@@ -232,7 +231,6 @@ function processToolingOptions(sourceSS, refSheet) {
   if (!toolingSheet) return;
   
   var lastRow = toolingSheet.getLastRow();
-  // Fetch Cols A to H (Index 1 to 8)
   var rawData = toolingSheet.getRange(1, 1, lastRow, 8).getValues();
   var databaseOutput = [];
   var currentParentID = null;
@@ -249,7 +247,6 @@ function processToolingOptions(sourceSS, refSheet) {
     if (colB !== "") { currentCategory = colB; }
     
     if (currentParentID && colF !== "" && colF !== "Part ID") {
-      // 0: Parent, 1: ChildID, 2: Category, 3: Description
       databaseOutput.push([currentParentID, colF, (currentCategory || ""), colH]);
     }
   }
@@ -268,7 +265,7 @@ function processToolingOptions(sourceSS, refSheet) {
       grouped[pID].push({ 
         partId: databaseOutput[k][1], 
         cat: databaseOutput[k][2],
-        desc: databaseOutput[k][3] // Capture Description
+        desc: databaseOutput[k][3] 
       });
     }
     
@@ -280,13 +277,10 @@ function processToolingOptions(sourceSS, refSheet) {
         var itm = items[m];
         var thisCat = itm.cat;
         if (thisCat !== "" && thisCat !== lastCat) { 
-          // Headers don't have descriptions, just use standard format
           menuOutput.push([parent, "--- " + thisCat + " ---"]); 
           lastCat = thisCat; 
         }
         
-        // PACKING STRATEGY: "ID :: Description"
-        // This keeps the column structure intact (Cols U, V) but passes rich data.
         var packedValue = itm.partId + " :: " + (itm.desc || "");
         menuOutput.push([parent, packedValue]);
       }
@@ -294,52 +288,6 @@ function processToolingOptions(sourceSS, refSheet) {
   }
   refSheet.getRange("U:V").clearContent();
   if (menuOutput.length > 0) refSheet.getRange(1, 21, menuOutput.length, 2).setValues(menuOutput);
-}
-
-function processVisionData(sourceSheet, refSheet) {
-  var textFinder = sourceSheet.createTextFinder("CONFIGURABLE VISION MODULE").matchEntireCell(false);
-  var found = textFinder.findNext();
-  if (!found) return;
-  
-  var startRow = found.getRow() + 1;
-  var lastRow = sourceSheet.getLastRow();
-  var numRows = lastRow - startRow + 1;
-  var rawData = sourceSheet.getRange(startRow, 5, numRows, 3).getValues();
-  var databaseOutput = [];
-  var menuOutput = [];
-  var currentCategory = "Uncategorized";
-  var groupedData = {};
-  var orderCategories = [];
-  
-  for (var i = 0; i < rawData.length; i++) {
-    var cat = rawData[i][0].toString().trim();
-    var id = rawData[i][1].toString().trim();
-    var desc = rawData[i][2].toString().trim();
-    
-    if (id === "" && cat === "") continue; 
-    if (cat !== "") currentCategory = cat; 
-    
-    if (id !== "" && id !== "Part Number") { 
-       databaseOutput.push([id, desc, currentCategory]);
-       if (!groupedData[currentCategory]) { groupedData[currentCategory] = []; orderCategories.push(currentCategory); }
-       groupedData[currentCategory].push(id);
-    }
-  }
-  
-  refSheet.getRange(1, 32, refSheet.getMaxRows(), 3).clearContent();
-  refSheet.getRange(1, 36, refSheet.getMaxRows(), 2).clearContent();
-  
-  if (databaseOutput.length > 0) refSheet.getRange(1, 32, databaseOutput.length, 3).setValues(databaseOutput);
-  
-  if (orderCategories.length > 0) {
-    for (var c = 0; c < orderCategories.length; c++) {
-      var cName = orderCategories[c];
-      menuOutput.push(["--- " + cName + " ---", ""]);
-      var ids = groupedData[cName];
-      for (var k = 0; k < ids.length; k++) { menuOutput.push(["", ids[k]]); }
-    }
-    if (menuOutput.length > 0) refSheet.getRange(1, 36, menuOutput.length, 2).setValues(menuOutput);
-  }
 }
 
 function fetchShoppingListItems(sourceSheet, triggerPhrase, colID, colDesc, stopMode) {
