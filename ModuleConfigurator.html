@@ -36,11 +36,15 @@
     .alert-label { color: #e74c3c; font-size: 10px; font-weight: 800; margin-top: 6px; display: block; }
     
     /* Buttons */
-    button { width: 100%; padding: 10px; background-color: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-top: 10px; }
+    .btn-group { margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px; }
+    button { width: 100%; padding: 10px; background-color: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-bottom: 5px; }
     button:hover { background-color: #219150; }
-    button#btnClose { background-color: #95a5a6; margin-top: 5px; }
-    
-    /* OptGroup Styling (Optional, browser dependent) */
+    button#btnSave { background-color: #2980b9; }
+    button#btnSave:hover { background-color: #2c3e50; }
+    button#btnClose { background-color: #95a5a6; }
+    button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+
+    /* OptGroup Styling */
     optgroup { font-weight: bold; color: #2c3e50; }
   </style>
 </head>
@@ -59,7 +63,7 @@
   <!-- Loading State -->
   <div id="loading" class="hidden">
     <div class="spinner"></div>
-    <div style="text-align:center; font-size:11px; color:#7f8c8d;">Processing Dependencies...</div>
+    <div id="loadingText" style="text-align:center; font-size:11px; color:#7f8c8d;">Processing Dependencies...</div>
   </div>
 
   <!-- Step 2: Configuration Form -->
@@ -89,11 +93,17 @@
       <div id="jigsBox" style="font-size:11px; color:#7f8c8d;">None</div>
     </div>
 
-    <button onclick="logSelection()">Check JSON (Debug)</button>
-    <button id="btnClose" onclick="google.script.host.close()">Close</button>
+    <div class="btn-group">
+      <button id="btnSave" onclick="saveConfiguration()">Save Configuration</button>
+      <button onclick="logSelection()">Check JSON (Debug)</button>
+      <button id="btnClose" onclick="google.script.host.close()">Close</button>
+    </div>
   </div>
 
   <script>
+    // GLOBAL STATE to hold raw data
+    var currentConfigData = null;
+
     window.onload = function() {
       google.script.run.withSuccessHandler(populateModuleDropdown).getModuleList();
     };
@@ -115,12 +125,16 @@
       if(!moduleID) return;
 
       document.getElementById("loading").classList.remove("hidden");
+      document.getElementById("loadingText").textContent = "Processing Dependencies...";
       document.getElementById("configContainer").classList.add("hidden");
 
       google.script.run.withSuccessHandler(renderConfiguration).getModuleDetails(moduleID);
     }
 
     function renderConfiguration(data) {
+      // SAVE TO GLOBAL STATE
+      currentConfigData = data;
+
       document.getElementById("loading").classList.add("hidden");
       document.getElementById("configContainer").classList.remove("hidden");
       
@@ -150,10 +164,7 @@
           if (tool.standardOptions && tool.standardOptions.length > 0) {
              html += '<select id="opt_' + tool.id + '" style="margin-top:4px;">';
              html += '<option value="" disabled selected>Select Option...</option>';
-             
-             // Build Categorized Options
              html += buildCategorizedOptions(tool.standardOptions);
-             
              html += '</select>';
           }
           
@@ -162,9 +173,7 @@
             html += '<span class="alert-label">⚠ SELECTION REQUIRED:</span>';
             html += '<select id="tip_' + tool.id + '" class="required-select">';
             html += '<option value="" disabled selected>Select Rubber Tip...</option>';
-            
             if (tool.rubberTipOptions) {
-               // Build Categorized Options
                html += buildCategorizedOptions(tool.rubberTipOptions);
             }
             html += '</select>';
@@ -187,16 +196,17 @@
         data.vision.options.forEach(function(opt){
            var o = document.createElement("option");
            o.value = opt.id;
-           // Display: ID - Description
            o.text = opt.id + " - " + opt.desc;
            visionSelect.appendChild(o);
         });
       } else if (data.vision.type === 'fixed') {
          visionCard.classList.remove("hidden");
          var fixedOpt = data.vision.options[0];
-         visionSelect.innerHTML = '<option selected disabled>' + fixedOpt.id + ' (' + fixedOpt.desc + ')</option>';
+         // Store value but disable selection
+         visionSelect.innerHTML = '<option value="' + fixedOpt.id + '" selected disabled>' + fixedOpt.id + ' (' + fixedOpt.desc + ')</option>';
       } else {
         visionCard.classList.add("hidden");
+        visionSelect.innerHTML = ""; // Clear
       }
       
       // 4. Jigs
@@ -208,47 +218,117 @@
       }
     }
     
-    /**
-     * Helper to Generate <optgroup> HTML
-     */
     function buildCategorizedOptions(optionsArray) {
        var html = "";
        var currentCategory = null;
        var isGroupOpen = false;
        
        optionsArray.forEach(function(opt) {
-          // If category changes, handle groups
           if (opt.category !== currentCategory) {
-             // Close previous group if open
-             if (isGroupOpen) {
-                html += '</optgroup>';
-                isGroupOpen = false;
-             }
-             
-             // Open new group if category exists
-             if (opt.category) {
-                html += '<optgroup label="' + opt.category + '">';
-                isGroupOpen = true;
-             }
+             if (isGroupOpen) { html += '</optgroup>'; isGroupOpen = false; }
+             if (opt.category) { html += '<optgroup label="' + opt.category + '">'; isGroupOpen = true; }
              currentCategory = opt.category;
           }
-          
           var displayText = opt.id;
           if(opt.desc) displayText += " | " + opt.desc;
-          
           html += '<option value="' + opt.id + '">' + displayText + '</option>';
        });
-       
-       // Close final group
-       if (isGroupOpen) {
-          html += '</optgroup>';
-       }
-       
+       if (isGroupOpen) html += '</optgroup>';
        return html;
     }
 
+    // --- PHASE 2: DATA COLLECTION & SAVE ---
+    function collectPayload() {
+      if (!currentConfigData) return null;
+
+      // 1. Module Info
+      var moduleSelect = document.getElementById("moduleSelect");
+      var moduleFullText = moduleSelect.options[moduleSelect.selectedIndex].text;
+      var moduleDescClean = moduleFullText.split(" | ")[1] || ""; // Get text after pipe
+      
+      var payload = {
+        moduleID: currentConfigData.moduleID,
+        moduleDesc: moduleDescClean,
+        elecID: "",
+        visionID: "",
+        jigID: "",
+        toolOptionID: "",
+        rubberTipID: ""
+      };
+
+      // 2. Electrical
+      if (currentConfigData.electrical && currentConfigData.electrical.id) {
+        payload.elecID = currentConfigData.electrical.id;
+      }
+
+      // 3. Vision
+      var visionSelect = document.getElementById("visionSelect");
+      if (visionSelect && visionSelect.value) {
+        payload.visionID = visionSelect.value;
+      } else if (currentConfigData.vision.type === 'fixed' && currentConfigData.vision.options.length > 0) {
+         // Fallback for fixed vision if disabled select isn't captured (though .value should work)
+         payload.visionID = currentConfigData.vision.options[0].id;
+      }
+
+      // 4. Jigs (First one only per instruction)
+      if (currentConfigData.jigs && currentConfigData.jigs.length > 0) {
+        payload.jigID = currentConfigData.jigs[0].id;
+      }
+
+      // 5. Tooling (Dynamic Selection)
+      // Find active tool dropdowns
+      var optSelect = document.querySelector('select[id^="opt_"]');
+      if (optSelect && optSelect.value) {
+        payload.toolOptionID = optSelect.value;
+      }
+
+      var tipSelect = document.querySelector('select[id^="tip_"]');
+      if (tipSelect && tipSelect.value) {
+        payload.rubberTipID = tipSelect.value;
+      }
+
+      return payload;
+    }
+
+    function saveConfiguration() {
+      var payload = collectPayload();
+      if (!payload) return;
+
+      // Basic Validation
+      if (!payload.moduleID) {
+        alert("Error: No Module Selected.");
+        return;
+      }
+
+      // UI Feedback
+      var btn = document.getElementById("btnSave");
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+      document.getElementById("loading").classList.remove("hidden");
+      document.getElementById("loadingText").textContent = "Writing to Trial Layout...";
+      document.getElementById("configContainer").classList.add("hidden");
+
+      // Send to Backend
+      google.script.run
+        .withSuccessHandler(function(response) {
+           document.getElementById("loading").classList.add("hidden");
+           document.getElementById("configContainer").classList.remove("hidden");
+           btn.disabled = false;
+           btn.textContent = "Save Configuration";
+           alert("Success! Saved to " + response.slot);
+        })
+        .withFailureHandler(function(err) {
+           document.getElementById("loading").classList.add("hidden");
+           document.getElementById("configContainer").classList.remove("hidden");
+           btn.disabled = false;
+           btn.textContent = "Save Configuration";
+           alert("Error: " + err.message);
+        })
+        .saveConfiguration(payload);
+    }
+
     function logSelection() {
-      console.log("Debug check passed. Ready for next phase.");
+      console.log("Current Payload:", collectPayload());
     }
   </script>
 </body>
