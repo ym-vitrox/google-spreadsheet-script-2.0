@@ -10,12 +10,19 @@
     .card { background: white; border-radius: 6px; padding: 12px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #3498db; }
     .card.vision { border-left-color: #9b59b6; }
     .card.tooling { border-left-color: #e67e22; }
+    .card.spare { border-left-color: #27ae60; } 
+    .card.layout { border-left-color: #e74c3c; } /* Red for Layout/Flags */
     
     .label { font-weight: bold; font-size: 11px; color: #7f8c8d; text-transform: uppercase; display: block; margin-bottom: 6px; }
     
     /* Inputs */
     select { width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; background: white; font-size: 13px; }
     select:focus { border-color: #3498db; outline: none; }
+    
+    /* Radio Styling */
+    .radio-group { margin-bottom: 10px; }
+    .radio-item { display: flex; align-items: start; margin-bottom: 6px; font-size: 12px; color: #2c3e50; }
+    .radio-item input { margin-right: 8px; margin-top: 2px; }
     
     /* Loading */
     .hidden { display: none; }
@@ -93,6 +100,34 @@
       <div id="jigsBox" style="font-size:11px; color:#7f8c8d;">None</div>
     </div>
 
+    <!-- Spare Parts -->
+    <div id="spareCard" class="card spare hidden">
+      <span class="label">Spare Parts (Bundle)</span>
+      <ul id="spareList" class="tool-list" style="margin-bottom: 8px;"></ul>
+      
+      <span class="alert-label">⚠ DECISION REQUIRED:</span>
+      <select id="spareSelect" class="required-select">
+        <option value="" selected>Select Option...</option>
+        <option value="yes">Yes, Include All</option>
+        <option value="no">No, Skip</option>
+      </select>
+    </div>
+
+    <!-- Layout Settings (NEW) -->
+    <div class="card layout">
+      <span class="label">Machine Layout Settings (Optional)</span>
+      
+      <div style="margin-bottom: 10px;">
+        <span id="vcmTitle" class="part-desc" style="font-weight:bold; margin-bottom:4px;">VCM Configuration</span>
+        <div id="vcmContainer" class="radio-group">Loading...</div>
+      </div>
+      
+      <div>
+         <span id="valveTitle" class="part-desc" style="font-weight:bold; margin-bottom:4px;">Valve Set Configuration</span>
+         <div id="valveContainer" class="radio-group">Loading...</div>
+      </div>
+    </div>
+
     <div class="btn-group">
       <button id="btnSave" onclick="saveConfiguration()">Save Configuration</button>
       <button onclick="logSelection()">Check JSON (Debug)</button>
@@ -106,6 +141,8 @@
 
     window.onload = function() {
       google.script.run.withSuccessHandler(populateModuleDropdown).getModuleList();
+      // (NEW) Load Dynamic Layout Headers
+      google.script.run.withSuccessHandler(renderLayoutSettings).getLayoutHeaders();
     };
 
     function populateModuleDropdown(modules) {
@@ -114,10 +151,43 @@
       modules.forEach(function(m) {
         var opt = document.createElement("option");
         opt.value = m.id;
-        // Display: ID | Description
         opt.text = m.id + " | " + m.desc;
         select.appendChild(opt);
       });
+    }
+    
+    // (NEW) Render Radio Buttons for Layout
+    function renderLayoutSettings(data) {
+      if (!data) return;
+      
+      // Helper to build radio buttons
+      function buildRadioGroup(containerId, items, groupName) {
+        var container = document.getElementById(containerId);
+        container.innerHTML = "";
+        
+        // Add "None" option first
+        var noneHtml = '<label class="radio-item"><input type="radio" name="' + groupName + '" value="-1" checked> None</label>';
+        container.innerHTML += noneHtml;
+        
+        items.forEach(function(item) {
+           var html = '<label class="radio-item">';
+           html += '<input type="radio" name="' + groupName + '" value="' + item.colIndex + '">';
+           html += item.label; // Dynamic Label from Row 6
+           html += '</label>';
+           container.innerHTML += html;
+        });
+      }
+      
+      // Set Titles (Row 5 Data)
+      if (data.group1) {
+          document.getElementById("vcmTitle").textContent = data.group1.title;
+          buildRadioGroup("vcmContainer", data.group1.options, "vcmGroup");
+      }
+      
+      if (data.group2) {
+          document.getElementById("valveTitle").textContent = data.group2.title;
+          buildRadioGroup("valveContainer", data.group2.options, "valveGroup");
+      }
     }
 
     function loadModuleData() {
@@ -132,7 +202,6 @@
     }
 
     function renderConfiguration(data) {
-      // SAVE TO GLOBAL STATE
       currentConfigData = data;
 
       document.getElementById("loading").classList.add("hidden");
@@ -160,7 +229,6 @@
           var html = '<span class="part-id">' + tool.id + '</span>';
           html += '<span class="part-desc">' + tool.desc + '</span>';
           
-          // Standard Options
           if (tool.standardOptions && tool.standardOptions.length > 0) {
              html += '<select id="opt_' + tool.id + '" style="margin-top:4px;">';
              html += '<option value="" disabled selected>Select Option...</option>';
@@ -168,7 +236,6 @@
              html += '</select>';
           }
           
-          // RUBBER TIP REQUIRED ALERT
           if (tool.requiresRubberTip) {
             html += '<span class="alert-label">⚠ SELECTION REQUIRED:</span>';
             html += '<select id="tip_' + tool.id + '" class="required-select">';
@@ -202,11 +269,10 @@
       } else if (data.vision.type === 'fixed') {
          visionCard.classList.remove("hidden");
          var fixedOpt = data.vision.options[0];
-         // Store value but disable selection
          visionSelect.innerHTML = '<option value="' + fixedOpt.id + '" selected disabled>' + fixedOpt.id + ' (' + fixedOpt.desc + ')</option>';
       } else {
         visionCard.classList.add("hidden");
-        visionSelect.innerHTML = ""; // Clear
+        visionSelect.innerHTML = ""; 
       }
       
       // 4. Jigs
@@ -215,6 +281,26 @@
          jigsBox.innerHTML = data.jigs.map(j => j.id + " <span style='color:#999'>(" + j.desc + ")</span>").join("<br>");
       } else {
          jigsBox.textContent = "No Jigs required.";
+      }
+
+      // 5. Spare Parts
+      var spareCard = document.getElementById("spareCard");
+      var spareList = document.getElementById("spareList");
+      var spareSelect = document.getElementById("spareSelect");
+
+      spareSelect.value = ""; 
+      spareList.innerHTML = "";
+
+      if (data.spareParts && data.spareParts.length > 0) {
+        spareCard.classList.remove("hidden");
+        data.spareParts.forEach(function(part) {
+           var li = document.createElement("li");
+           li.className = "tool-item";
+           li.innerHTML = '<span class="part-id">' + part.id + '</span><span class="part-desc">' + part.desc + '</span>';
+           spareList.appendChild(li);
+        });
+      } else {
+        spareCard.classList.add("hidden");
       }
     }
     
@@ -241,10 +327,9 @@
     function collectPayload() {
       if (!currentConfigData) return null;
 
-      // 1. Module Info
       var moduleSelect = document.getElementById("moduleSelect");
       var moduleFullText = moduleSelect.options[moduleSelect.selectedIndex].text;
-      var moduleDescClean = moduleFullText.split(" | ")[1] || ""; // Get text after pipe
+      var moduleDescClean = moduleFullText.split(" | ")[1] || ""; 
       
       var payload = {
         moduleID: currentConfigData.moduleID,
@@ -253,30 +338,26 @@
         visionID: "",
         jigID: "",
         toolOptionID: "",
-        rubberTipID: ""
+        rubberTipID: "",
+        sparePartsID: "",
+        layoutFlags: {} // (NEW)
       };
 
-      // 2. Electrical
       if (currentConfigData.electrical && currentConfigData.electrical.id) {
         payload.elecID = currentConfigData.electrical.id;
       }
 
-      // 3. Vision
       var visionSelect = document.getElementById("visionSelect");
       if (visionSelect && visionSelect.value) {
         payload.visionID = visionSelect.value;
       } else if (currentConfigData.vision.type === 'fixed' && currentConfigData.vision.options.length > 0) {
-         // Fallback for fixed vision if disabled select isn't captured (though .value should work)
          payload.visionID = currentConfigData.vision.options[0].id;
       }
 
-      // 4. Jigs (First one only per instruction)
       if (currentConfigData.jigs && currentConfigData.jigs.length > 0) {
         payload.jigID = currentConfigData.jigs[0].id;
       }
 
-      // 5. Tooling (Dynamic Selection)
-      // Find active tool dropdowns
       var optSelect = document.querySelector('select[id^="opt_"]');
       if (optSelect && optSelect.value) {
         payload.toolOptionID = optSelect.value;
@@ -287,20 +368,45 @@
         payload.rubberTipID = tipSelect.value;
       }
 
+      // Spare Parts Validation
+      var spareCard = document.getElementById("spareCard");
+      if (!spareCard.classList.contains("hidden")) {
+         var decision = document.getElementById("spareSelect").value;
+         if (decision === "") {
+            alert("Please decide whether to include Spare Parts (Yes/No).");
+            return null; 
+         } else if (decision === "yes") {
+            var ids = currentConfigData.spareParts.map(function(p){ return p.id; }).join("; ");
+            payload.sparePartsID = ids;
+         } else {
+            payload.sparePartsID = ""; 
+         }
+      }
+      
+      // (NEW) Collect Layout Flags
+      // Check VCM Radio
+      var vcmRadio = document.querySelector('input[name="vcmGroup"]:checked');
+      if (vcmRadio && vcmRadio.value !== "-1") {
+         payload.layoutFlags[vcmRadio.value] = true;
+      }
+      // Check Valve Radio
+      var valveRadio = document.querySelector('input[name="valveGroup"]:checked');
+      if (valveRadio && valveRadio.value !== "-1") {
+         payload.layoutFlags[valveRadio.value] = true;
+      }
+
       return payload;
     }
 
     function saveConfiguration() {
       var payload = collectPayload();
-      if (!payload) return;
+      if (!payload) return; 
 
-      // Basic Validation
       if (!payload.moduleID) {
         alert("Error: No Module Selected.");
         return;
       }
 
-      // UI Feedback
       var btn = document.getElementById("btnSave");
       btn.disabled = true;
       btn.textContent = "Saving...";
@@ -308,7 +414,6 @@
       document.getElementById("loadingText").textContent = "Writing to Trial Layout...";
       document.getElementById("configContainer").classList.add("hidden");
 
-      // Send to Backend
       google.script.run
         .withSuccessHandler(function(response) {
            document.getElementById("loading").classList.add("hidden");
