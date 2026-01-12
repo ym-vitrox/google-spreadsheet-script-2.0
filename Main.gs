@@ -163,11 +163,12 @@ function updateReferenceData(sourceSS, sourceSheet) {
     refSheet.hideSheet(); 
   }
   
-  // 1. Backup Existing Mappings (Preserve W:AD)
+  // 1. Backup Existing Mappings (Preserve W:AF)
+  // CHANGE: Now backing up 30 columns (C:AF) to include Spare Parts (AE/AF)
   var lastRefRow = refSheet.getLastRow();
   var existingMappings = {}; 
   if (lastRefRow > 0) {
-    var currentData = refSheet.getRange(1, 3, lastRefRow, 28).getValues();
+    var currentData = refSheet.getRange(1, 3, lastRefRow, 30).getValues(); // Was 28 (C:AD), now 30 (C:AF)
     for (var i = 0; i < currentData.length; i++) {
       var pId = currentData[i][0].toString().trim();
       if (pId !== "") {
@@ -175,7 +176,9 @@ function updateReferenceData(sourceSS, sourceSheet) {
           eId: currentData[i][20], eDesc: currentData[i][21],
           tId: currentData[i][22], tDesc: currentData[i][23],
           jId: currentData[i][24], jDesc: currentData[i][25],
-          vId: currentData[i][26], vDesc: currentData[i][27]
+          vId: currentData[i][26], vDesc: currentData[i][27],
+          // New Spare Part Columns
+          spId: currentData[i][28], spDesc: currentData[i][29]
         };
       }
     }
@@ -183,7 +186,7 @@ function updateReferenceData(sourceSS, sourceSheet) {
   
   // 2. Clear Target Areas
   refSheet.getRange("A:D").clear(); 
-  refSheet.getRange("W:AD").clear(); 
+  refSheet.getRange("W:AF").clear(); // CHANGE: Clear W:AF instead of W:AD
   
   // 3. Fetch New Data
   var configItems = fetchRawItems(sourceSheet, "OPTIONAL MODULE: 430001-A712", 6, 7, ["CONFIGURABLE MODULE"]);
@@ -200,17 +203,21 @@ function updateReferenceData(sourceSS, sourceSheet) {
       var mDesc = moduleItems[m][1];
       
       var eId = "", eDesc = "", tId = "", tDesc = "", jId = "", jDesc = "", vId = "", vDesc = "";
+      var spId = "", spDesc = ""; // New vars
+      
       if (existingMappings[mId]) {
         eId = existingMappings[mId].eId; eDesc = existingMappings[mId].eDesc;
         tId = existingMappings[mId].tId; tDesc = existingMappings[mId].tDesc;
         jId = existingMappings[mId].jId; jDesc = existingMappings[mId].jDesc;
         vId = existingMappings[mId].vId; vDesc = existingMappings[mId].vDesc;
+        spId = existingMappings[mId].spId; spDesc = existingMappings[mId].spDesc; // Restore new data
       }
       moduleOutput.push([mId, mDesc]);
-      mappingOutput.push([eId, eDesc, tId, tDesc, jId, jDesc, vId, vDesc]);
+      // Push 10 columns now
+      mappingOutput.push([eId, eDesc, tId, tDesc, jId, jDesc, vId, vDesc, spId, spDesc]);
     }
     refSheet.getRange(1, 3, moduleOutput.length, 2).setValues(moduleOutput);
-    refSheet.getRange(1, 23, mappingOutput.length, 8).setValues(mappingOutput);
+    refSheet.getRange(1, 23, mappingOutput.length, 10).setValues(mappingOutput); // CHANGE: Width is 10
   }
 }
 
