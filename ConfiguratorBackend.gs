@@ -42,8 +42,9 @@ function getModuleDetails(moduleID) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var refSheet = ss.getSheetByName("REF_DATA");
   
-  // Fetch C:AD range
-  var dataRange = refSheet.getRange("C:AD").getValues();
+  // Fetch C:AF range (Extended to include Spare Parts)
+  // C is Col 3, AF is Col 32. Total cols = 30.
+  var dataRange = refSheet.getRange("C:AF").getValues();
   var rowData = null;
   
   for (var i = 0; i < dataRange.length; i++) {
@@ -60,6 +61,7 @@ function getModuleDetails(moduleID) {
   // Y=22 (Tool ID), Z=23 (Tool Desc)
   // AA=24 (Jig ID), AB=25 (Jig Desc)
   // AC=26 (Vision ID), AD=27 (Vision Desc)
+  // AE=28 (Spare ID), AF=29 (Spare Desc) -> NEW
   
   // --- ELECTRICAL ---
   var elecResult = null;
@@ -156,12 +158,29 @@ function getModuleDetails(moduleID) {
     }
   }
 
+  // --- SPARE PARTS (NEW) ---
+  var sparePartsResult = [];
+  var spIdsStr = rowData[28]; // Col AE
+  var spDescStr = rowData[29]; // Col AF
+  
+  if (spIdsStr) {
+    var spIds = String(spIdsStr).split(';').map(function(s){ return s.trim(); });
+    var spDescs = String(spDescStr).split(';').map(function(s){ return s.trim(); });
+    
+    for (var s = 0; s < spIds.length; s++) {
+      if (spIds[s]) {
+        sparePartsResult.push({ id: spIds[s], desc: spDescs[s] || "" });
+      }
+    }
+  }
+
   return {
     moduleID: moduleID,
     electrical: elecResult,
     tools: toolsResult,
     jigs: jigsResult,
-    vision: visionResult
+    vision: visionResult,
+    spareParts: sparePartsResult // Return the parsed list
   };
 }
 
@@ -194,6 +213,46 @@ function fetchOptionsForTool(menuData, parentID) {
     }
   }
   return options;
+}
+
+/**
+ * 2.5 (NEW) Get Layout Header Labels
+ * Reads Row 5 (Category) and Row 6 (Options) from TRIAL-LAYOUT CONFIGURATION
+ * to populate the VCM/Valve UI dynamically.
+ */
+function getLayoutHeaders() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
+  if (!sheet) return null;
+
+  // Read Row 5 & 6, Cols B-F (Indices 2-6)
+  // getRange(row, col, numRows, numCols) -> getRange(5, 2, 2, 5)
+  // Row 5 = Categories, Row 6 = Options
+  var rawData = sheet.getRange(5, 2, 2, 5).getValues();
+  var rowCategories = rawData[0]; // Row 5
+  var rowOptions = rawData[1];    // Row 6
+  
+  // Mapping:
+  // VCM Group: Cols 2(B) & 3(C). Category Name from B5 (Index 0).
+  // Valve Group: Cols 4(D), 5(E), 6(F). Category Name from D5 (Index 2).
+  
+  return {
+    group1: {
+      title: rowCategories[0], // B5 "VCM"
+      options: [
+        { colIndex: 2, label: rowOptions[0] }, // B6
+        { colIndex: 3, label: rowOptions[1] }  // C6
+      ]
+    },
+    group2: {
+      title: rowCategories[2], // D5 "VALVE SET"
+      options: [
+        { colIndex: 4, label: rowOptions[2] }, // D6
+        { colIndex: 5, label: rowOptions[3] }, // E6
+        { colIndex: 6, label: rowOptions[4] }  // F6
+      ]
+    }
+  };
 }
 
 /**
@@ -232,8 +291,9 @@ function saveConfiguration(payload) {
       }
 
       // EMPTY DETECT
-      // We consider it empty if Description is empty or just dashes "---"
-      if (desc === "" || desc === "---") {
+      // UPDATED: Now strictly checks for empty strings only. 
+      // Removed the check for "---" to ensure rows marked with dashes are skipped.
+      if (desc === "") {
         targetRowIndex = i + 1; // 1-based index
         foundSlotLabel = slotID;
         break; // Found it!
@@ -253,6 +313,7 @@ function saveConfiguration(payload) {
   // Col N (14) : Tool Option ID
   // Col O (15) : Rubber Tip ID
   // Col P (16) : Jig ID
+  // Col Q (17) : Spare Part ID
 
   sheet.getRange(targetRowIndex, 8).setValue(payload.moduleDesc);
   sheet.getRange(targetRowIndex, 11).setValue(payload.moduleID);
@@ -261,6 +322,30 @@ function saveConfiguration(payload) {
   sheet.getRange(targetRowIndex, 14).setValue(payload.toolOptionID);
   sheet.getRange(targetRowIndex, 15).setValue(payload.rubberTipID);
   sheet.getRange(targetRowIndex, 16).setValue(payload.jigID);
+  sheet.getRange(targetRowIndex, 17).setValue(payload.sparePartsID);
+  
+  // (NEW) Write VCM/Valve Flags (Cols 2-6)
+  // Payload.layoutFlags = { "2": true, "3": false ... }
+  if (payload.layoutFlags) {
+     for (var col = 2; col <= 6; col++) {
+        var val = payload.layoutFlags[String(col)] === true; // Ensure boolean
+        var cell = sheet.getRange(targetRowIndex, col);
+        
+        // CHECKBOX LOGIC:
+        // 1. Check if the cell already has Checkbox validation.
+        // 2. If not (it's empty or text), insert checkboxes first.
+        // 3. Set the Boolean value (which will check/uncheck the box).
+        
+        var rule = cell.getDataValidation();
+        var isCheckbox = (rule != null && rule.getCriteriaType() == SpreadsheetApp.DataValidationCriteria.CHECKBOX);
+        
+        if (!isCheckbox) {
+           cell.insertCheckboxes();
+        }
+        
+        cell.setValue(val);
+     }
+  }
 
   return { status: "success", slot: foundSlotLabel };
 }
