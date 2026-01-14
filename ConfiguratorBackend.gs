@@ -1,6 +1,7 @@
 /**
  * ConfiguratorBackend.gs
  * Server-side logic for the Module Configurator UI.
+ * UPDATED: Phase 4.4 (Smart Fill Logic)
  */
 
 // --- CONSTANTS ---
@@ -18,8 +19,7 @@ function getModuleList() {
   var lastRow = sheet.getLastRow();
   if (lastRow < 1) return [];
   
-  // Read Cols C and D (Index 3 and 4 in 1-based notation? No, getRange uses 1-based)
-  // Col C = 3, Col D = 4.
+  // Read Cols C and D
   var rawValues = sheet.getRange(1, 3, lastRow, 2).getValues();
   var modules = [];
   
@@ -180,7 +180,7 @@ function getModuleDetails(moduleID) {
     tools: toolsResult,
     jigs: jigsResult,
     vision: visionResult,
-    spareParts: sparePartsResult // Return the parsed list
+    spareParts: sparePartsResult
   };
 }
 
@@ -216,25 +216,16 @@ function fetchOptionsForTool(menuData, parentID) {
 }
 
 /**
- * 2.5 (NEW) Get Layout Header Labels
- * Reads Row 5 (Category) and Row 6 (Options) from TRIAL-LAYOUT CONFIGURATION
- * to populate the VCM/Valve UI dynamically.
+ * 2.5 Get Layout Header Labels
  */
 function getLayoutHeaders() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
   if (!sheet) return null;
 
-  // Read Row 5 & 6, Cols B-F (Indices 2-6)
-  // getRange(row, col, numRows, numCols) -> getRange(5, 2, 2, 5)
-  // Row 5 = Categories, Row 6 = Options
   var rawData = sheet.getRange(5, 2, 2, 5).getValues();
   var rowCategories = rawData[0]; // Row 5
   var rowOptions = rawData[1];    // Row 6
-  
-  // Mapping:
-  // VCM Group: Cols 2(B) & 3(C). Category Name from B5 (Index 0).
-  // Valve Group: Cols 4(D), 5(E), 6(F). Category Name from D5 (Index 2).
   
   return {
     group1: {
@@ -257,17 +248,13 @@ function getLayoutHeaders() {
 
 /**
  * 3. SAVE CONFIGURATION TO TRIAL LAYOUT
- * Scans for first empty slot between B10 and B32.
  */
 function saveConfiguration(payload) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
   if (!sheet) throw new Error("Sheet 'TRIAL-LAYOUT CONFIGURATION' not found.");
 
-  // Get data for scanning: Col G (Slot IDs) and Col H (Descriptions)
-  // Assuming headers are top rows, we grab mostly everything
   var lastRow = sheet.getLastRow();
-  // Fetch G:H. Index 1 = Col G, Index 2 = Col H in the resulting 2D array
   var scanRange = sheet.getRange(1, 7, lastRow, 2).getValues();
 
   var targetRowIndex = -1;
@@ -275,28 +262,22 @@ function saveConfiguration(payload) {
   var startScanning = false;
 
   for (var i = 0; i < scanRange.length; i++) {
-    var slotID = String(scanRange[i][0]).trim(); // Col G
-    var desc = String(scanRange[i][1]).trim();   // Col H
+    var slotID = String(scanRange[i][0]).trim();
+    var desc = String(scanRange[i][1]).trim();
 
-    // START Condition
     if (slotID === "B10") {
       startScanning = true;
     }
 
-    // CHECK Condition (Only if started)
     if (startScanning) {
-      // STOP Condition
       if (slotID === "B33" || (slotID.indexOf("B") === 0 && parseInt(slotID.substring(1)) > 32)) {
-         break; // Went past B32
+         break; 
       }
 
-      // EMPTY DETECT
-      // UPDATED: Now strictly checks for empty strings only. 
-      // Removed the check for "---" to ensure rows marked with dashes are skipped.
       if (desc === "") {
-        targetRowIndex = i + 1; // 1-based index
+        targetRowIndex = i + 1; 
         foundSlotLabel = slotID;
-        break; // Found it!
+        break; 
       }
     }
   }
@@ -305,17 +286,8 @@ function saveConfiguration(payload) {
     throw new Error("Configuration List (B10-B32) is full. Please clear some rows.");
   }
 
-  // --- WRITE DATA ---
-  // Col H (8)  : Description
-  // Col K (11) : Module ID
-  // Col L (12) : Elec ID
-  // Col M (13) : Vision ID
-  // Col N (14) : Tool Option ID
-  // Col O (15) : Rubber Tip ID
-  // Col P (16) : Jig ID
-  // Col Q (17) : Spare Part ID
-
   sheet.getRange(targetRowIndex, 8).setValue(payload.moduleDesc);
+  sheet.getRange(targetRowIndex, 9).setValue(payload.numberVision || 1);
   sheet.getRange(targetRowIndex, 11).setValue(payload.moduleID);
   sheet.getRange(targetRowIndex, 12).setValue(payload.elecID);
   sheet.getRange(targetRowIndex, 13).setValue(payload.visionID);
@@ -324,28 +296,333 @@ function saveConfiguration(payload) {
   sheet.getRange(targetRowIndex, 16).setValue(payload.jigID);
   sheet.getRange(targetRowIndex, 17).setValue(payload.sparePartsID);
   
-  // (NEW) Write VCM/Valve Flags (Cols 2-6)
-  // Payload.layoutFlags = { "2": true, "3": false ... }
   if (payload.layoutFlags) {
      for (var col = 2; col <= 6; col++) {
-        var val = payload.layoutFlags[String(col)] === true; // Ensure boolean
+        var val = payload.layoutFlags[String(col)] === true; 
         var cell = sheet.getRange(targetRowIndex, col);
-        
-        // CHECKBOX LOGIC:
-        // 1. Check if the cell already has Checkbox validation.
-        // 2. If not (it's empty or text), insert checkboxes first.
-        // 3. Set the Boolean value (which will check/uncheck the box).
-        
         var rule = cell.getDataValidation();
         var isCheckbox = (rule != null && rule.getCriteriaType() == SpreadsheetApp.DataValidationCriteria.CHECKBOX);
-        
-        if (!isCheckbox) {
-           cell.insertCheckboxes();
-        }
-        
+        if (!isCheckbox) { cell.insertCheckboxes(); }
         cell.setValue(val);
      }
   }
 
   return { status: "success", slot: foundSlotLabel };
+}
+
+// =======================================================
+// PHASE 4.2: EXTRACTION LOGIC ("The Brain")
+// =======================================================
+
+/**
+ * A. Build Master Dictionary
+ */
+function buildMasterDictionary() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var refSheet = ss.getSheetByName("REF_DATA");
+  if (!refSheet) return {};
+
+  var lastRow = refSheet.getLastRow();
+  var dictionary = {};
+
+  function addToDict(id, desc) {
+    if (id && id !== "" && id !== "Part ID") {
+      var cleanId = String(id).trim();
+      if (!dictionary[cleanId]) { 
+        dictionary[cleanId] = String(desc).trim();
+      }
+    }
+  }
+
+  // 1. Modules
+  var moduleData = refSheet.getRange(1, 3, lastRow, 2).getValues();
+  for (var i = 0; i < moduleData.length; i++) {
+    addToDict(moduleData[i][0], moduleData[i][1]);
+  }
+
+  // 2. Tooling Menu
+  var menuData = refSheet.getRange(1, 21, lastRow, 2).getValues();
+  for (var j = 0; j < menuData.length; j++) {
+    var packed = String(menuData[j][1]); 
+    if (packed.indexOf("::") > -1) {
+      var parts = packed.split("::");
+      addToDict(parts[0], parts[1]);
+    }
+  }
+
+  // 3. Manual Mapping Block
+  var manualData = refSheet.getRange(1, 23, lastRow, 10).getValues(); 
+  for (var k = 0; k < manualData.length; k++) {
+    var row = manualData[k];
+    for (var p = 0; p < 10; p += 2) {
+       var rawId = row[p];
+       var rawDesc = row[p+1];
+       if (rawId) {
+          var ids = String(rawId).split(";");
+          var descs = String(rawDesc).split(";");
+          for (var x = 0; x < ids.length; x++) {
+             var cleanId = ids[x].trim();
+             var cleanDesc = (descs[x] || "").trim();
+             addToDict(cleanId, cleanDesc);
+          }
+       }
+    }
+  }
+  
+  return dictionary;
+}
+
+/**
+ * B. Extract Data for Production
+ */
+function extractProductionData() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
+  if (!sheet) throw new Error("Staging Sheet Missing");
+
+  var masterDict = buildMasterDictionary();
+  var lastRow = sheet.getLastRow();
+  
+  var headerRow = sheet.getRange(6, 1, 1, 18).getValues()[0];
+  var rawData = sheet.getRange(1, 1, lastRow, 18).getValues();
+
+  var payload = {
+    MODULE: [],
+    ELECTRICAL: [],
+    VISION: [],
+    TOOLING: [],
+    JIG: [], // "JIG/CALIBRATION"
+    SPARES: [],
+    VCM: [],
+    OTHERS: [], 
+    rowsToMarkSynced: [] 
+  };
+
+  var startScanning = false;
+  
+  for (var i = 0; i < rawData.length; i++) {
+    var row = rawData[i];
+    var turretName = String(row[6]).trim(); // Col G
+    var syncStatus = String(row[9]).trim(); // Col J
+    var moduleID = String(row[10]).trim();  // Col K
+    
+    if (turretName === "B10") startScanning = true;
+    
+    if (turretName === "B33" || (turretName.startsWith("B") && parseInt(turretName.substring(1)) > 32)) {
+      break;
+    }
+
+    if (startScanning) {
+      if (moduleID === "") continue; 
+      if (syncStatus === "SYNCED") continue; 
+
+      payload.rowsToMarkSynced.push({row: i + 1});
+      
+      var globalQty = parseInt(row[8]); 
+      if (isNaN(globalQty) || globalQty < 1) globalQty = 1;
+      
+      var itemIndex = payload.rowsToMarkSynced.length; 
+
+      function pushItem(category, id, descOverride, isPrimary) {
+        if (!id || id === "") return;
+        var cleanId = id.trim();
+        var finalDesc = descOverride || masterDict[cleanId] || "Check REF_DATA";
+        
+        payload[category].push({
+          itemIdx: isPrimary ? itemIndex : "", 
+          id: cleanId,
+          desc: finalDesc,
+          qty: globalQty 
+        });
+      }
+
+      pushItem("MODULE", moduleID, String(row[7]), true);
+      pushItem("ELECTRICAL", String(row[11]), null, true);
+      pushItem("VISION", String(row[12]), null, true);
+
+      // Tooling
+      pushItem("TOOLING", String(row[13]), null, true); 
+      pushItem("TOOLING", String(row[14]), null, false); 
+
+      pushItem("JIG", String(row[15]), null, true);
+
+      // Spares
+      var sparesRaw = String(row[16]);
+      if (sparesRaw) {
+        var spareIds = sparesRaw.split(";");
+        for (var s = 0; s < spareIds.length; s++) {
+          var sId = spareIds[s].trim();
+          pushItem("SPARES", sId, null, (s === 0)); 
+        }
+      }
+
+      function extractIdFromHeader(headerText) {
+        var match = headerText.match(/(\d{4,}-\w+)/); 
+        return match ? match[0] : "";
+      }
+
+      if (row[1] === true) pushItem("VCM", extractIdFromHeader(headerRow[1]), null, true);
+      if (row[2] === true) pushItem("VCM", extractIdFromHeader(headerRow[2]), null, true);
+
+      if (row[3] === true) pushItem("OTHERS", extractIdFromHeader(headerRow[3]), null, true);
+      if (row[4] === true) pushItem("OTHERS", extractIdFromHeader(headerRow[4]), null, true);
+      if (row[5] === true) pushItem("OTHERS", extractIdFromHeader(headerRow[5]), null, true);
+
+    } 
+  } 
+
+  return payload;
+}
+
+// =======================================================
+// PHASE 4.3: PRODUCTION INJECTION & STATUS UPDATE
+// =======================================================
+
+/**
+ * C. Main Injection Controller
+ */
+function injectProductionData(payload) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("ORDERING LIST");
+  if (!sheet) throw new Error("ORDERING LIST Sheet Missing");
+
+  var itemsAdded = 0;
+
+  // Map Payload Key to Sheet Header Name
+  var sections = [
+    { key: "MODULE", header: "MODULE" },
+    { key: "ELECTRICAL", header: "ELECTRICAL" },
+    { key: "VISION", header: "VISION" },
+    { key: "VCM", header: "VCM" },
+    { key: "OTHERS", header: "OTHERS" },
+    { key: "SPARES", header: "SPARES" },
+    { key: "JIG", header: "JIG/CALIBRATION" },
+    { key: "TOOLING", header: "TOOLING" } // Will default to OTHERS if missing, or alert
+  ];
+
+  for (var i = 0; i < sections.length; i++) {
+    var sec = sections[i];
+    var items = payload[sec.key];
+    if (items && items.length > 0) {
+      itemsAdded += insertRowsIntoSection(sheet, sec.header, items);
+    }
+  }
+
+  return itemsAdded;
+}
+
+/**
+ * D. The Smart Fill Helper (Fill then Expand) - UPDATED PHASE 4.4
+ */
+function insertRowsIntoSection(sheet, sectionHeader, items) {
+  var lastRow = sheet.getLastRow();
+  // Fetch columns A (Headers) and D (Part ID) to analyze structure
+  // We grab A1:D(LastRow) to have context of headers and content
+  var rangeValues = sheet.getRange("A1:D" + lastRow).getValues();
+
+  var startRowIndex = -1; // 0-based index of the Header row
+  var anchorRowIndex = -1; // 0-based index of the Next Header row
+
+  // 1. Find Start Header
+  for (var i = 0; i < rangeValues.length; i++) {
+    if (String(rangeValues[i][0]).trim().toUpperCase() === sectionHeader.toUpperCase()) {
+      startRowIndex = i;
+      break;
+    }
+  }
+
+  if (startRowIndex === -1) {
+    console.warn("Section Header '" + sectionHeader + "' not found in ORDERING LIST.");
+    return 0; // Skip this section
+  }
+
+  // 2. Find Next Header (Anchor)
+  // Scan downwards from the row AFTER startRowIndex.
+  // The logic: The next "Header" is the first non-empty cell in Column A.
+  for (var j = startRowIndex + 1; j < rangeValues.length; j++) {
+    var cellVal = String(rangeValues[j][0]).trim(); // Col A
+    if (cellVal !== "") {
+       anchorRowIndex = j;
+       break;
+    }
+  }
+
+  // If no next header found, the Anchor is effectively "after the last row"
+  if (anchorRowIndex === -1) {
+     anchorRowIndex = rangeValues.length; // Points to the row AFTER the last data row
+  }
+
+  // 3. Find Write Cursor (First Empty Row in Zone)
+  // Zone is between (startRowIndex + 1) and (anchorRowIndex - 1)
+  var writeCursorIndex = -1;
+
+  for (var k = startRowIndex + 1; k < anchorRowIndex; k++) {
+    // Check Column D (Index 3) for content (Part ID)
+    // Also check Col C (Index 2) just in case D is empty but C has Item #
+    var partId = String(rangeValues[k][3]).trim();
+    var itemNum = String(rangeValues[k][2]).trim();
+
+    if (partId === "" && itemNum === "") {
+      writeCursorIndex = k;
+      break;
+    }
+  }
+
+  // If section is full (no empty rows found), the cursor is at the anchor
+  if (writeCursorIndex === -1) {
+    writeCursorIndex = anchorRowIndex;
+  }
+
+  // 4. Calculate Capacity & Deficit
+  // writeCursorIndex is 0-based index.
+  // anchorRowIndex is 0-based index.
+  // Available rows = anchorRowIndex - writeCursorIndex
+  var availableSlots = anchorRowIndex - writeCursorIndex;
+  var itemsNeeded = items.length;
+  var deficit = itemsNeeded - availableSlots;
+
+  // 5. Expand if necessary (Scenario B)
+  if (deficit > 0) {
+    // We insert rows BEFORE the anchor row.
+    // anchorRowIndex is 0-based, so (anchorRowIndex + 1) is the 1-based row number.
+    // This pushes the Anchor down, creating 'deficit' amount of new blank rows.
+    sheet.insertRowsBefore(anchorRowIndex + 1, deficit);
+  }
+
+  // 6. Write Data
+  // We write starting at writeCursorIndex.
+  // Converting to 1-based: writeCursorIndex + 1
+  var startWriteRow = writeCursorIndex + 1;
+
+  var output = [];
+  for (var x = 0; x < items.length; x++) {
+    output.push([
+      items[x].itemIdx, // Col C
+      items[x].id,      // Col D
+      items[x].desc,    // Col E
+      items[x].qty      // Col F
+    ]);
+  }
+
+  // Range: Row, Col 3 (C), Height, Width 4
+  sheet.getRange(startWriteRow, 3, itemsNeeded, 4).setValues(output);
+
+  return itemsNeeded;
+}
+
+/**
+ * E. Update Status in Staging
+ */
+function markRowsAsSynced(rowsToSync) {
+  if (!rowsToSync || rowsToSync.length === 0) return;
+  
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
+  if (!sheet) return;
+
+  for (var i = 0; i < rowsToSync.length; i++) {
+     var r = rowsToSync[i].row;
+     // Set Column J (10)
+     sheet.getRange(r, 10).setValue("SYNCED");
+  }
 }
