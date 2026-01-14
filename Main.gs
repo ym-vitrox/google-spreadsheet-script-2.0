@@ -42,12 +42,19 @@ function onEdit(e) {
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   
+  // Menu 1: Refresh (Database Sync)
   ui.createMenu('Refresh') 
     .addItem('Sync REF_DATA (DB Only)', 'runMasterSync') 
     .addToUi();
 
+  // Menu 2: Configurator (The UI)
   ui.createMenu('Configurator')
     .addItem('Open Configurator Window', 'openSidebar')
+    .addToUi();
+
+  // Menu 3: Sync to Order List (Production Sync)
+  ui.createMenu('Sync to Order List')
+    .addItem('Run Synchronization', 'runProductionSync')
     .addToUi();
 }
 
@@ -150,7 +157,52 @@ function insertShoppingList(sheet, row, count, dropdownRef, vlookupRef) {
 }
 
 // =========================================
-// 5. SYNC UTILITIES
+// 5. PRODUCTION SYNC (FINAL PHASE 4.3)
+// =========================================
+function runProductionSync() {
+  var ui = SpreadsheetApp.getUi();
+  
+  // Confirmation Dialog
+  var result = ui.alert(
+     'Confirm Synchronization',
+     'This will append all new (unsynced) configurations from the Trial Layout to the Ordering List.\n\nAre you sure you want to proceed?',
+     ui.ButtonSet.YES_NO);
+
+  if (result == ui.Button.NO) {
+    return;
+  }
+  
+  try {
+    // 1. Extract Data
+    var payload = extractProductionData();
+    
+    // 2. Validation
+    if (payload.rowsToMarkSynced.length === 0) {
+      ui.alert("No New Data", "All rows in the Trial Layout are already marked as SYNCED.", ui.ButtonSet.OK);
+      return;
+    }
+    
+    // 3. Inject Data (Write to Production)
+    var itemsAdded = injectProductionData(payload);
+    
+    // 4. Update Status (Write to Staging)
+    markRowsAsSynced(payload.rowsToMarkSynced);
+    
+    // 5. Success Message
+    var msg = "Synchronization Successful!\n\n";
+    msg += "Rows Processed: " + payload.rowsToMarkSynced.length + "\n";
+    msg += "Items Added to Order List: " + itemsAdded;
+    
+    ui.alert("Success", msg, ui.ButtonSet.OK);
+    
+  } catch (e) {
+    console.error(e);
+    ui.alert("Sync Error", e.message, ui.ButtonSet.OK);
+  }
+}
+
+// =========================================
+// 6. SYNC UTILITIES
 // =========================================
 
 function updateReferenceData(sourceSS, sourceSheet) {
