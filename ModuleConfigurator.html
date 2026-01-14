@@ -12,6 +12,7 @@
     .card.tooling { border-left-color: #e67e22; }
     .card.spare { border-left-color: #27ae60; } 
     .card.layout { border-left-color: #e74c3c; } /* Red for Layout/Flags */
+    .card.qty { border-left-color: #f1c40f; } /* Yellow for Qty */
     
     .label { font-weight: bold; font-size: 11px; color: #7f8c8d; text-transform: uppercase; display: block; margin-bottom: 6px; }
     
@@ -110,6 +111,23 @@
         <option value="" selected>Select Option...</option>
         <option value="yes">Yes, Include All</option>
         <option value="no">No, Skip</option>
+      </select>
+    </div>
+
+    <!-- NEW: Quantity Selector (Phase 4.1) -->
+    <div class="card qty">
+      <span class="label">Number of Vision Systems (Qty)</span>
+      <select id="numVisionSelect">
+        <option value="1" selected>1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+        <option value="9">9</option>
+        <option value="10">10</option>
       </select>
     </div>
 
@@ -302,6 +320,9 @@
       } else {
         spareCard.classList.add("hidden");
       }
+      
+      // (NEW) Reset Quantity to 1
+      document.getElementById("numVisionSelect").value = "1";
     }
     
     function buildCategorizedOptions(optionsArray) {
@@ -331,6 +352,9 @@
       var moduleFullText = moduleSelect.options[moduleSelect.selectedIndex].text;
       var moduleDescClean = moduleFullText.split(" | ")[1] || ""; 
       
+      // (NEW) Get Quantity
+      var numVision = document.getElementById("numVisionSelect").value || "1";
+      
       var payload = {
         moduleID: currentConfigData.moduleID,
         moduleDesc: moduleDescClean,
@@ -340,7 +364,8 @@
         toolOptionID: "",
         rubberTipID: "",
         sparePartsID: "",
-        layoutFlags: {} // (NEW)
+        numberVision: numVision, // NEW for Phase 4.1
+        layoutFlags: {} 
       };
 
       if (currentConfigData.electrical && currentConfigData.electrical.id) {
@@ -383,13 +408,11 @@
          }
       }
       
-      // (NEW) Collect Layout Flags
-      // Check VCM Radio
+      // Collect Layout Flags
       var vcmRadio = document.querySelector('input[name="vcmGroup"]:checked');
       if (vcmRadio && vcmRadio.value !== "-1") {
          payload.layoutFlags[vcmRadio.value] = true;
       }
-      // Check Valve Radio
       var valveRadio = document.querySelector('input[name="valveGroup"]:checked');
       if (valveRadio && valveRadio.value !== "-1") {
          payload.layoutFlags[valveRadio.value] = true;
