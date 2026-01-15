@@ -1,7 +1,7 @@
 /**
  * ConfiguratorBackend.gs
  * Server-side logic for the Module Configurator UI.
- * UPDATED: Phase 4.4 (Smart Fill Logic)
+ * UPDATED: Phase 4.5 (VCM/Valve Description Bypass)
  */
 
 // --- CONSTANTS ---
@@ -374,6 +374,7 @@ function buildMasterDictionary() {
 
 /**
  * B. Extract Data for Production
+ * UPDATED PHASE 4.5 (VCM Bypass)
  */
 function extractProductionData() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -426,6 +427,7 @@ function extractProductionData() {
       function pushItem(category, id, descOverride, isPrimary) {
         if (!id || id === "") return;
         var cleanId = id.trim();
+        // Override takes precedence (Phase 4.5 fix)
         var finalDesc = descOverride || masterDict[cleanId] || "Check REF_DATA";
         
         payload[category].push({
@@ -456,17 +458,42 @@ function extractProductionData() {
         }
       }
 
-      function extractIdFromHeader(headerText) {
-        var match = headerText.match(/(\d{4,}-\w+)/); 
-        return match ? match[0] : "";
+      // --- Phase 4.5: Smart Header Parsing ---
+      function parseHeaderData(headerText) {
+        var match = headerText.match(/(\d{4,}-\w+)/);
+        if (match) {
+           var id = match[0];
+           // Remove ID from string to get Description
+           var desc = headerText.replace(id, "").trim();
+           // Clean up parens if needed (optional)
+           return { id: id, desc: desc };
+        }
+        return { id: "", desc: "" };
       }
 
-      if (row[1] === true) pushItem("VCM", extractIdFromHeader(headerRow[1]), null, true);
-      if (row[2] === true) pushItem("VCM", extractIdFromHeader(headerRow[2]), null, true);
+      // VCM (Indices 1, 2)
+      if (row[1] === true) {
+         var d = parseHeaderData(headerRow[1]);
+         pushItem("VCM", d.id, d.desc, true); // Pass Description!
+      }
+      if (row[2] === true) {
+         var d = parseHeaderData(headerRow[2]);
+         pushItem("VCM", d.id, d.desc, true);
+      }
 
-      if (row[3] === true) pushItem("OTHERS", extractIdFromHeader(headerRow[3]), null, true);
-      if (row[4] === true) pushItem("OTHERS", extractIdFromHeader(headerRow[4]), null, true);
-      if (row[5] === true) pushItem("OTHERS", extractIdFromHeader(headerRow[5]), null, true);
+      // OTHERS (Indices 3, 4, 5)
+      if (row[3] === true) {
+         var d = parseHeaderData(headerRow[3]);
+         pushItem("OTHERS", d.id, d.desc, true);
+      }
+      if (row[4] === true) {
+         var d = parseHeaderData(headerRow[4]);
+         pushItem("OTHERS", d.id, d.desc, true);
+      }
+      if (row[5] === true) {
+         var d = parseHeaderData(headerRow[5]);
+         pushItem("OTHERS", d.id, d.desc, true);
+      }
 
     } 
   } 
