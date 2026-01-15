@@ -1,50 +1,67 @@
 /**
  * MAIN SCRIPT
  * Central Hub for Triggers, Menus, and Sync Logic.
+ * UPDATED: Phase 5 (Release Metadata Management)
  */
 
 // =========================================
-// 1. LIVE TRIGGER (Config Section Only)
+// 1. GLOBAL TRIGGER ROUTER (Installable Trigger)
 // =========================================
-function onEdit(e) {
+/**
+ * IMPORTANT: This function must be set up as an INSTALLABLE TRIGGER.
+ * Go to Triggers -> Add Trigger -> processGlobalEdits -> From Spreadsheet -> On Edit.
+ * DO NOT name this "onEdit", or simple trigger limitations will block the password popup.
+ */
+function processGlobalEdits(e) {
   if (!e) return;
   
   var sheet = e.source.getActiveSheet();
-  if (sheet.getName() !== "ORDERING LIST") return;
+  var sheetName = sheet.getName();
+  if (sheetName !== "ORDERING LIST") return;
 
   var range = e.range;
   var row = range.getRow();
   var col = range.getColumn();
-  
-  // We strictly look for edits in Column D (Part ID)
-  if (col !== 4) return;
-  
   var newVal = e.value; 
   var oldVal = e.oldValue; 
   
-  // --- LOCATE SECTIONS ---
-  var configFinder = sheet.getRange("A:A").createTextFinder("CONFIG").matchEntireCell(true).findNext();
-  var moduleFinder = sheet.getRange("A:A").createTextFinder("MODULE").matchEntireCell(true).findNext();
-  
-  // Define Boundaries for Config Section
-  var configStart = configFinder ? configFinder.getRow() + 1 : 0;
-  var configEnd = moduleFinder ? moduleFinder.getRow() - 1 : 0;
-  
-  // Execute Config Section Logic (Shopping Lists)
-  if (row >= configStart && row <= configEnd && configStart > 0) {
-    handleConfigSection(sheet, row, newVal, oldVal);
+  // ROUTE 1: Config Section Edits (Column 4 - Part ID)
+  if (col === 4) {
+    // --- LOCATE SECTIONS ---
+    var configFinder = sheet.getRange("A:A").createTextFinder("CONFIG").matchEntireCell(true).findNext();
+    var moduleFinder = sheet.getRange("A:A").createTextFinder("MODULE").matchEntireCell(true).findNext();
+    
+    // Define Boundaries for Config Section
+    var configStart = configFinder ? configFinder.getRow() + 1 : 0;
+    var configEnd = moduleFinder ? moduleFinder.getRow() - 1 : 0;
+    
+    // Execute Config Section Logic (Shopping Lists)
+    if (row >= configStart && row <= configEnd && configStart > 0) {
+      handleConfigSection(sheet, row, newVal, oldVal);
+    }
+  }
+
+  // ROUTE 2: Release Checkbox Edits (Column 7 - RELEASE)
+  if (col === 7) {
+    handleCheckboxEdit(e); // Located in OrderingListHandlers.gs
   }
 }
 
 // =========================================
-// 2. MENU CREATION
+// 2. MENU CREATION & INITIALIZATION
 // =========================================
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   
+  // 1. Auto-Fix Locale (Phase 5 Requirement)
+  // Ensures Date objects are written as dd/MM/yyyy compatible
+  SpreadsheetApp.getActiveSpreadsheet().setSpreadsheetLocale('en_MY');
+
   // Menu 1: Refresh (Database Sync)
   ui.createMenu('Refresh') 
     .addItem('Sync REF_DATA (DB Only)', 'runMasterSync') 
+    // New Tool for Option B (Retroactive Fix)
+    //.addItem('Initialize Release Columns (One-Time)', 'initializeReleaseColumns') 
     .addToUi();
 
   // Menu 2: Configurator (The UI)
@@ -216,11 +233,10 @@ function updateReferenceData(sourceSS, sourceSheet) {
   }
   
   // 1. Backup Existing Mappings (Preserve W:AF)
-  // CHANGE: Now backing up 30 columns (C:AF) to include Spare Parts (AE/AF)
   var lastRefRow = refSheet.getLastRow();
   var existingMappings = {}; 
   if (lastRefRow > 0) {
-    var currentData = refSheet.getRange(1, 3, lastRefRow, 30).getValues(); // Was 28 (C:AD), now 30 (C:AF)
+    var currentData = refSheet.getRange(1, 3, lastRefRow, 30).getValues(); // C:AF
     for (var i = 0; i < currentData.length; i++) {
       var pId = currentData[i][0].toString().trim();
       if (pId !== "") {
@@ -229,7 +245,6 @@ function updateReferenceData(sourceSS, sourceSheet) {
           tId: currentData[i][22], tDesc: currentData[i][23],
           jId: currentData[i][24], jDesc: currentData[i][25],
           vId: currentData[i][26], vDesc: currentData[i][27],
-          // New Spare Part Columns
           spId: currentData[i][28], spDesc: currentData[i][29]
         };
       }
@@ -238,7 +253,7 @@ function updateReferenceData(sourceSS, sourceSheet) {
   
   // 2. Clear Target Areas
   refSheet.getRange("A:D").clear(); 
-  refSheet.getRange("W:AF").clear(); // CHANGE: Clear W:AF instead of W:AD
+  refSheet.getRange("W:AF").clear();
   
   // 3. Fetch New Data
   var configItems = fetchRawItems(sourceSheet, "OPTIONAL MODULE: 430001-A712", 6, 7, ["CONFIGURABLE MODULE"]);
@@ -255,21 +270,20 @@ function updateReferenceData(sourceSS, sourceSheet) {
       var mDesc = moduleItems[m][1];
       
       var eId = "", eDesc = "", tId = "", tDesc = "", jId = "", jDesc = "", vId = "", vDesc = "";
-      var spId = "", spDesc = ""; // New vars
+      var spId = "", spDesc = ""; 
       
       if (existingMappings[mId]) {
         eId = existingMappings[mId].eId; eDesc = existingMappings[mId].eDesc;
         tId = existingMappings[mId].tId; tDesc = existingMappings[mId].tDesc;
         jId = existingMappings[mId].jId; jDesc = existingMappings[mId].jDesc;
         vId = existingMappings[mId].vId; vDesc = existingMappings[mId].vDesc;
-        spId = existingMappings[mId].spId; spDesc = existingMappings[mId].spDesc; // Restore new data
+        spId = existingMappings[mId].spId; spDesc = existingMappings[mId].spDesc;
       }
       moduleOutput.push([mId, mDesc]);
-      // Push 10 columns now
       mappingOutput.push([eId, eDesc, tId, tDesc, jId, jDesc, vId, vDesc, spId, spDesc]);
     }
     refSheet.getRange(1, 3, moduleOutput.length, 2).setValues(moduleOutput);
-    refSheet.getRange(1, 23, mappingOutput.length, 10).setValues(mappingOutput); // CHANGE: Width is 10
+    refSheet.getRange(1, 23, mappingOutput.length, 10).setValues(mappingOutput); 
   }
 }
 
