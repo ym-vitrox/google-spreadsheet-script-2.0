@@ -1,7 +1,7 @@
 /**
  * ConfiguratorBackend.gs
  * Server-side logic for the Module Configurator UI.
- * UPDATED: Phase 4.5 (VCM/Valve Description Bypass)
+ * UPDATED: Phase 4.6 (Continuous Auto-Numbering)
  */
 
 // --- CONSTANTS ---
@@ -10,7 +10,6 @@ var RUBBER_TIP_SOURCE_ID_BACKEND = "430001-A380";
 
 /**
  * 1. Get List of Modules (ID and Description)
- * Reads REF_DATA Cols C (ID) and D (Description).
  */
 function getModuleList() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("REF_DATA");
@@ -19,7 +18,6 @@ function getModuleList() {
   var lastRow = sheet.getLastRow();
   if (lastRow < 1) return [];
   
-  // Read Cols C and D
   var rawValues = sheet.getRange(1, 3, lastRow, 2).getValues();
   var modules = [];
   
@@ -36,14 +34,10 @@ function getModuleList() {
 
 /**
  * 2. Get Full Details for Selected Module
- * Fetches IDs and Descriptions for all components.
  */
 function getModuleDetails(moduleID) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var refSheet = ss.getSheetByName("REF_DATA");
-  
-  // Fetch C:AF range (Extended to include Spare Parts)
-  // C is Col 3, AF is Col 32. Total cols = 30.
   var dataRange = refSheet.getRange("C:AF").getValues();
   var rowData = null;
   
@@ -56,13 +50,6 @@ function getModuleDetails(moduleID) {
   
   if (!rowData) return { error: "Module ID not found." };
   
-  // Array Indices (0-based from C):
-  // W=20 (Elec ID), X=21 (Elec Desc)
-  // Y=22 (Tool ID), Z=23 (Tool Desc)
-  // AA=24 (Jig ID), AB=25 (Jig Desc)
-  // AC=26 (Vision ID), AD=27 (Vision Desc)
-  // AE=28 (Spare ID), AF=29 (Spare Desc) -> NEW
-  
   // --- ELECTRICAL ---
   var elecResult = null;
   var elecIdsStr = rowData[20];
@@ -72,7 +59,6 @@ function getModuleDetails(moduleID) {
     var eIds = String(elecIdsStr).split(';').map(function(s){ return s.trim(); });
     var eDescs = String(elecDescStr).split(';').map(function(s){ return s.trim(); });
     
-    // Default to Instance 1
     if (eIds.length > 0) {
       elecResult = {
         id: eIds[0],
@@ -104,11 +90,9 @@ function getModuleDetails(moduleID) {
         requiresRubberTip: false
       };
       
-      // Standard Options
       var stdOpts = fetchOptionsForTool(menuData, tID);
       if (stdOpts.length > 0) toolObj.standardOptions = stdOpts;
       
-      // Rubber Tip Dependency
       if (RUBBER_TIP_PARENTS_BACKEND.includes(tID)) {
         var tipOpts = fetchOptionsForTool(menuData, RUBBER_TIP_SOURCE_ID_BACKEND);
         if (tipOpts.length > 0) {
@@ -129,7 +113,6 @@ function getModuleDetails(moduleID) {
     var vIds = String(visionIdsStr).split(';').map(function(s){ return s.trim(); });
     var vDescs = String(visionDescStr).split(';').map(function(s){ return s.trim(); });
     
-    // Create objects for each vision option
     var vOptions = [];
     for(var v=0; v<vIds.length; v++){
       if(vIds[v]) {
@@ -158,10 +141,10 @@ function getModuleDetails(moduleID) {
     }
   }
 
-  // --- SPARE PARTS (NEW) ---
+  // --- SPARE PARTS ---
   var sparePartsResult = [];
-  var spIdsStr = rowData[28]; // Col AE
-  var spDescStr = rowData[29]; // Col AF
+  var spIdsStr = rowData[28]; 
+  var spDescStr = rowData[29]; 
   
   if (spIdsStr) {
     var spIds = String(spIdsStr).split(';').map(function(s){ return s.trim(); });
@@ -258,7 +241,6 @@ function saveConfiguration(payload) {
   var scanRange = sheet.getRange(1, 7, lastRow, 2).getValues();
 
   var targetRowIndex = -1;
-  var foundSlotLabel = "";
   var startScanning = false;
 
   for (var i = 0; i < scanRange.length; i++) {
@@ -276,7 +258,6 @@ function saveConfiguration(payload) {
 
       if (desc === "") {
         targetRowIndex = i + 1; 
-        foundSlotLabel = slotID;
         break; 
       }
     }
@@ -307,16 +288,13 @@ function saveConfiguration(payload) {
      }
   }
 
-  return { status: "success", slot: foundSlotLabel };
+  return { status: "success", slot: "B" + (targetRowIndex - (lastRow - 32)) }; // Simplified Slot return
 }
 
 // =======================================================
 // PHASE 4.2: EXTRACTION LOGIC ("The Brain")
 // =======================================================
 
-/**
- * A. Build Master Dictionary
- */
 function buildMasterDictionary() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var refSheet = ss.getSheetByName("REF_DATA");
@@ -374,7 +352,7 @@ function buildMasterDictionary() {
 
 /**
  * B. Extract Data for Production
- * UPDATED PHASE 4.5 (VCM Bypass)
+ * UPDATED PHASE 4.6 (Item Number Logic Change)
  */
 function extractProductionData() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -392,7 +370,7 @@ function extractProductionData() {
     ELECTRICAL: [],
     VISION: [],
     TOOLING: [],
-    JIG: [], // "JIG/CALIBRATION"
+    JIG: [], 
     SPARES: [],
     VCM: [],
     OTHERS: [], 
@@ -422,16 +400,15 @@ function extractProductionData() {
       var globalQty = parseInt(row[8]); 
       if (isNaN(globalQty) || globalQty < 1) globalQty = 1;
       
-      var itemIndex = payload.rowsToMarkSynced.length; 
+      // Removed hardcoded itemIndex logic
 
       function pushItem(category, id, descOverride, isPrimary) {
         if (!id || id === "") return;
         var cleanId = id.trim();
-        // Override takes precedence (Phase 4.5 fix)
         var finalDesc = descOverride || masterDict[cleanId] || "Check REF_DATA";
         
         payload[category].push({
-          itemIdx: isPrimary ? itemIndex : "", 
+          requiresNumbering: isPrimary, // Boolean flag instead of number
           id: cleanId,
           desc: finalDesc,
           qty: globalQty 
@@ -444,7 +421,7 @@ function extractProductionData() {
 
       // Tooling
       pushItem("TOOLING", String(row[13]), null, true); 
-      pushItem("TOOLING", String(row[14]), null, false); 
+      pushItem("TOOLING", String(row[14]), null, false); // Secondary
 
       pushItem("JIG", String(row[15]), null, true);
 
@@ -454,34 +431,31 @@ function extractProductionData() {
         var spareIds = sparesRaw.split(";");
         for (var s = 0; s < spareIds.length; s++) {
           var sId = spareIds[s].trim();
-          pushItem("SPARES", sId, null, (s === 0)); 
+          pushItem("SPARES", sId, null, (s === 0)); // Only first is primary
         }
       }
 
-      // --- Phase 4.5: Smart Header Parsing ---
       function parseHeaderData(headerText) {
         var match = headerText.match(/(\d{4,}-\w+)/);
         if (match) {
            var id = match[0];
-           // Remove ID from string to get Description
            var desc = headerText.replace(id, "").trim();
-           // Clean up parens if needed (optional)
            return { id: id, desc: desc };
         }
         return { id: "", desc: "" };
       }
 
-      // VCM (Indices 1, 2)
+      // VCM
       if (row[1] === true) {
          var d = parseHeaderData(headerRow[1]);
-         pushItem("VCM", d.id, d.desc, true); // Pass Description!
+         pushItem("VCM", d.id, d.desc, true); 
       }
       if (row[2] === true) {
          var d = parseHeaderData(headerRow[2]);
          pushItem("VCM", d.id, d.desc, true);
       }
 
-      // OTHERS (Indices 3, 4, 5)
+      // OTHERS
       if (row[3] === true) {
          var d = parseHeaderData(headerRow[3]);
          pushItem("OTHERS", d.id, d.desc, true);
@@ -494,7 +468,6 @@ function extractProductionData() {
          var d = parseHeaderData(headerRow[5]);
          pushItem("OTHERS", d.id, d.desc, true);
       }
-
     } 
   } 
 
@@ -505,9 +478,6 @@ function extractProductionData() {
 // PHASE 4.3: PRODUCTION INJECTION & STATUS UPDATE
 // =======================================================
 
-/**
- * C. Main Injection Controller
- */
 function injectProductionData(payload) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("ORDERING LIST");
@@ -515,7 +485,6 @@ function injectProductionData(payload) {
 
   var itemsAdded = 0;
 
-  // Map Payload Key to Sheet Header Name
   var sections = [
     { key: "MODULE", header: "MODULE" },
     { key: "ELECTRICAL", header: "ELECTRICAL" },
@@ -524,7 +493,7 @@ function injectProductionData(payload) {
     { key: "OTHERS", header: "OTHERS" },
     { key: "SPARES", header: "SPARES" },
     { key: "JIG", header: "JIG/CALIBRATION" },
-    { key: "TOOLING", header: "TOOLING" } // Will default to OTHERS if missing, or alert
+    { key: "TOOLING", header: "TOOLING" } 
   ];
 
   for (var i = 0; i < sections.length; i++) {
@@ -539,16 +508,14 @@ function injectProductionData(payload) {
 }
 
 /**
- * D. The Smart Fill Helper (Fill then Expand) - UPDATED PHASE 4.4
+ * D. The Smart Fill Helper - UPDATED PHASE 4.6 (Auto Numbering)
  */
 function insertRowsIntoSection(sheet, sectionHeader, items) {
   var lastRow = sheet.getLastRow();
-  // Fetch columns A (Headers) and D (Part ID) to analyze structure
-  // We grab A1:D(LastRow) to have context of headers and content
   var rangeValues = sheet.getRange("A1:D" + lastRow).getValues();
 
-  var startRowIndex = -1; // 0-based index of the Header row
-  var anchorRowIndex = -1; // 0-based index of the Next Header row
+  var startRowIndex = -1;
+  var anchorRowIndex = -1;
 
   // 1. Find Start Header
   for (var i = 0; i < rangeValues.length; i++) {
@@ -560,32 +527,42 @@ function insertRowsIntoSection(sheet, sectionHeader, items) {
 
   if (startRowIndex === -1) {
     console.warn("Section Header '" + sectionHeader + "' not found in ORDERING LIST.");
-    return 0; // Skip this section
+    return 0; 
   }
 
   // 2. Find Next Header (Anchor)
-  // Scan downwards from the row AFTER startRowIndex.
-  // The logic: The next "Header" is the first non-empty cell in Column A.
   for (var j = startRowIndex + 1; j < rangeValues.length; j++) {
-    var cellVal = String(rangeValues[j][0]).trim(); // Col A
+    var cellVal = String(rangeValues[j][0]).trim(); 
     if (cellVal !== "") {
        anchorRowIndex = j;
        break;
     }
   }
 
-  // If no next header found, the Anchor is effectively "after the last row"
   if (anchorRowIndex === -1) {
-     anchorRowIndex = rangeValues.length; // Points to the row AFTER the last data row
+     anchorRowIndex = rangeValues.length; 
   }
 
-  // 3. Find Write Cursor (First Empty Row in Zone)
-  // Zone is between (startRowIndex + 1) and (anchorRowIndex - 1)
+  // --- NEW: Find Current Max Item Number in this Zone ---
+  var currentMaxNum = 0;
+  // Zone is strictly between start and anchor.
+  // Column C is index 2.
+  for (var r = startRowIndex + 1; r < anchorRowIndex; r++) {
+     var val = rangeValues[r][2]; // Column C
+     if (typeof val === 'number') {
+        if (val > currentMaxNum) currentMaxNum = val;
+     } else if (val) {
+        var parsed = parseInt(val);
+        if (!isNaN(parsed) && parsed > currentMaxNum) {
+           currentMaxNum = parsed;
+        }
+     }
+  }
+
+  // 3. Find Write Cursor
   var writeCursorIndex = -1;
 
   for (var k = startRowIndex + 1; k < anchorRowIndex; k++) {
-    // Check Column D (Index 3) for content (Part ID)
-    // Also check Col C (Index 2) just in case D is empty but C has Item #
     var partId = String(rangeValues[k][3]).trim();
     var itemNum = String(rangeValues[k][2]).trim();
 
@@ -595,51 +572,45 @@ function insertRowsIntoSection(sheet, sectionHeader, items) {
     }
   }
 
-  // If section is full (no empty rows found), the cursor is at the anchor
   if (writeCursorIndex === -1) {
     writeCursorIndex = anchorRowIndex;
   }
 
   // 4. Calculate Capacity & Deficit
-  // writeCursorIndex is 0-based index.
-  // anchorRowIndex is 0-based index.
-  // Available rows = anchorRowIndex - writeCursorIndex
   var availableSlots = anchorRowIndex - writeCursorIndex;
   var itemsNeeded = items.length;
   var deficit = itemsNeeded - availableSlots;
 
-  // 5. Expand if necessary (Scenario B)
+  // 5. Expand if necessary
   if (deficit > 0) {
-    // We insert rows BEFORE the anchor row.
-    // anchorRowIndex is 0-based, so (anchorRowIndex + 1) is the 1-based row number.
-    // This pushes the Anchor down, creating 'deficit' amount of new blank rows.
     sheet.insertRowsBefore(anchorRowIndex + 1, deficit);
   }
 
-  // 6. Write Data
-  // We write starting at writeCursorIndex.
-  // Converting to 1-based: writeCursorIndex + 1
+  // 6. Write Data (With Continuous Numbering)
   var startWriteRow = writeCursorIndex + 1;
-
   var output = [];
+  var numberingCounter = currentMaxNum;
+
   for (var x = 0; x < items.length; x++) {
+    var itemLabel = "";
+    if (items[x].requiresNumbering) {
+       numberingCounter++;
+       itemLabel = numberingCounter;
+    }
+
     output.push([
-      items[x].itemIdx, // Col C
+      itemLabel,        // Col C (Computed)
       items[x].id,      // Col D
       items[x].desc,    // Col E
       items[x].qty      // Col F
     ]);
   }
 
-  // Range: Row, Col 3 (C), Height, Width 4
   sheet.getRange(startWriteRow, 3, itemsNeeded, 4).setValues(output);
 
   return itemsNeeded;
 }
 
-/**
- * E. Update Status in Staging
- */
 function markRowsAsSynced(rowsToSync) {
   if (!rowsToSync || rowsToSync.length === 0) return;
   
@@ -649,7 +620,6 @@ function markRowsAsSynced(rowsToSync) {
 
   for (var i = 0; i < rowsToSync.length; i++) {
      var r = rowsToSync[i].row;
-     // Set Column J (10)
      sheet.getRange(r, 10).setValue("SYNCED");
   }
 }
