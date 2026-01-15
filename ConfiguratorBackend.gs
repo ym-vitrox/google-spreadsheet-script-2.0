@@ -1,7 +1,7 @@
 /**
  * ConfiguratorBackend.gs
  * Server-side logic for the Module Configurator UI.
- * UPDATED: Phase 4.6 (Continuous Auto-Numbering)
+ * UPDATED: Phase 5 (Release Metadata Management - Sync Logic Update)
  */
 
 // --- CONSTANTS ---
@@ -508,7 +508,7 @@ function injectProductionData(payload) {
 }
 
 /**
- * D. The Smart Fill Helper - UPDATED PHASE 4.6 (Auto Numbering)
+ * D. The Smart Fill Helper - UPDATED PHASE 5 (New Columns G, H, I)
  */
 function insertRowsIntoSection(sheet, sectionHeader, items) {
   var lastRow = sheet.getLastRow();
@@ -543,10 +543,8 @@ function insertRowsIntoSection(sheet, sectionHeader, items) {
      anchorRowIndex = rangeValues.length; 
   }
 
-  // --- NEW: Find Current Max Item Number in this Zone ---
+  // --- Find Current Max Item Number in this Zone ---
   var currentMaxNum = 0;
-  // Zone is strictly between start and anchor.
-  // Column C is index 2.
   for (var r = startRowIndex + 1; r < anchorRowIndex; r++) {
      var val = rangeValues[r][2]; // Column C
      if (typeof val === 'number') {
@@ -586,7 +584,7 @@ function insertRowsIntoSection(sheet, sectionHeader, items) {
     sheet.insertRowsBefore(anchorRowIndex + 1, deficit);
   }
 
-  // 6. Write Data (With Continuous Numbering)
+  // 6. Write Data (Expanded for Phase 5)
   var startWriteRow = writeCursorIndex + 1;
   var output = [];
   var numberingCounter = currentMaxNum;
@@ -599,14 +597,30 @@ function insertRowsIntoSection(sheet, sectionHeader, items) {
     }
 
     output.push([
-      itemLabel,        // Col C (Computed)
-      items[x].id,      // Col D
-      items[x].desc,    // Col E
-      items[x].qty      // Col F
+      itemLabel,    // Col C: Item No
+      items[x].id,  // Col D: Part ID
+      items[x].desc,// Col E: Description
+      items[x].qty, // Col F: Qty
+      false,        // Col G: Released (Checkbox Default False)
+      "",           // Col H: Date (Empty)
+      ""            // Col I: Type (Empty)
     ]);
   }
 
-  sheet.getRange(startWriteRow, 3, itemsNeeded, 4).setValues(output);
+  // Write 7 columns (C through I)
+  sheet.getRange(startWriteRow, 3, itemsNeeded, 7).setValues(output);
+
+  // 7. Apply Data Validation (Checkbox & Dropdown)
+  // Apply Checkbox to Col G
+  sheet.getRange(startWriteRow, 7, itemsNeeded, 1).insertCheckboxes();
+
+  // Apply Dropdown to Col I
+  var typeRange = sheet.getRange(startWriteRow, 9, itemsNeeded, 1);
+  var rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['CHARGE OUT', 'MRP'], true)
+    .setAllowInvalid(true)
+    .build();
+  typeRange.setDataValidation(rule);
 
   return itemsNeeded;
 }
@@ -622,4 +636,25 @@ function markRowsAsSynced(rowsToSync) {
      var r = rowsToSync[i].row;
      sheet.getRange(r, 10).setValue("SYNCED");
   }
+}
+
+/**
+ * OPTIONAL: Retroactive Fix Tool (Option B support tool, kept for safety)
+ */
+function initializeReleaseColumns() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("ORDERING LIST");
+  var lastRow = sheet.getLastRow();
+  
+  // Apply to G:G (Checkboxes)
+  sheet.getRange(7, 7, lastRow - 6, 1).insertCheckboxes();
+  
+  // Apply to I:I (Dropdowns)
+  var rule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(['CHARGE OUT', 'MRP'], true)
+    .setAllowInvalid(true)
+    .build();
+  sheet.getRange(7, 9, lastRow - 6, 1).setDataValidation(rule);
+  
+  SpreadsheetApp.getUi().alert("Columns Initialized.");
 }
