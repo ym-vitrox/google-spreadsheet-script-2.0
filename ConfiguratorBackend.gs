@@ -1,7 +1,7 @@
 /**
  * ConfiguratorBackend.gs
  * Server-side logic for the Module Configurator UI.
- * UPDATED: Phase 5 (Release Metadata Management - Sync Logic Update)
+ * UPDATED: Phase 6 (Dynamic Anchor Scanning & Strict "CONFIGURATION" Fence)
  */
 
 // --- CONSTANTS ---
@@ -200,30 +200,40 @@ function fetchOptionsForTool(menuData, parentID) {
 
 /**
  * 2.5 Get Layout Header Labels
+ * UPDATED Phase 6: Dynamic Anchor Scanning
  */
 function getLayoutHeaders() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
   if (!sheet) return null;
 
-  var rawData = sheet.getRange(5, 2, 2, 5).getValues();
-  var rowCategories = rawData[0]; // Row 5
-  var rowOptions = rawData[1];    // Row 6
+  // Find VCM Anchor Row dynamically
+  var vcmFinder = sheet.getRange("B:B").createTextFinder("VCM").matchEntireCell(true).findNext();
+  if (!vcmFinder) {
+     throw new Error("Critical Error: 'VCM' anchor not found in Column B of Trial Layout. Please ensure headers exist.");
+  }
+  var vcmRowIndex = vcmFinder.getRow();
+
+  // Read Headers (Anchor Row) and Options (Row below Anchor)
+  // B:F = 5 columns
+  var rawData = sheet.getRange(vcmRowIndex, 2, 2, 5).getValues();
+  var rowCategories = rawData[0]; // Header Row
+  var rowOptions = rawData[1];    // Option Row
   
   return {
     group1: {
-      title: rowCategories[0], // B5 "VCM"
+      title: rowCategories[0], // B "VCM"
       options: [
-        { colIndex: 2, label: rowOptions[0] }, // B6
-        { colIndex: 3, label: rowOptions[1] }  // C6
+        { colIndex: 2, label: rowOptions[0] }, // B
+        { colIndex: 3, label: rowOptions[1] }  // C
       ]
     },
     group2: {
-      title: rowCategories[2], // D5 "VALVE SET"
+      title: rowCategories[2], // D "VALVE SET"
       options: [
-        { colIndex: 4, label: rowOptions[2] }, // D6
-        { colIndex: 5, label: rowOptions[3] }, // E6
-        { colIndex: 6, label: rowOptions[4] }  // F6
+        { colIndex: 4, label: rowOptions[2] }, // D
+        { colIndex: 5, label: rowOptions[3] }, // E
+        { colIndex: 6, label: rowOptions[4] }  // F
       ]
     }
   };
@@ -231,6 +241,7 @@ function getLayoutHeaders() {
 
 /**
  * 3. SAVE CONFIGURATION TO TRIAL LAYOUT
+ * UPDATED Phase 6: "Look Before You Leap" Strategy (Correctly finds B10)
  */
 function saveConfiguration(payload) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -238,35 +249,66 @@ function saveConfiguration(payload) {
   if (!sheet) throw new Error("Sheet 'TRIAL-LAYOUT CONFIGURATION' not found.");
 
   var lastRow = sheet.getLastRow();
-  var scanRange = sheet.getRange(1, 7, lastRow, 2).getValues();
+  
+  // STEP 1: Find the "CONFIGURATION" Fence
+  // This header marks the absolute start of the list. We MUST write below it (or at the same level if merged).
+  var configHeaderFinder = sheet.getRange("A:B").createTextFinder("CONFIGURATION").matchEntireCell(true).findNext();
+  
+  if (!configHeaderFinder) {
+    throw new Error("Critical Error: 'CONFIGURATION' header not found in Column A or B. Cannot safely locate list start.");
+  }
+
+  // Use the exact row where "CONFIGURATION" is found.
+  // Because "CONFIGURATION" (Col A) and "B10" (Col G) are on the same row,
+  // we start scanning AT this row, not +1.
+  var startScanRow = configHeaderFinder.getRow();
+  
+  if (startScanRow > lastRow) {
+     // Safety check if sheet is malformed
+  }
+
+  // Scan Column G (Turret Location) starting from the header row downwards
+  var scanRange = sheet.getRange(startScanRow, 7, lastRow - startScanRow + 1, 2).getValues();
 
   var targetRowIndex = -1;
   var startScanning = false;
 
   for (var i = 0; i < scanRange.length; i++) {
-    var slotID = String(scanRange[i][0]).trim();
-    var desc = String(scanRange[i][1]).trim();
+    var slotID = String(scanRange[i][0]).trim(); // Col G
+    var desc = String(scanRange[i][1]).trim();   // Col H
 
-    if (slotID === "B10") {
-      startScanning = true;
+    // STRICT VALIDATION: Is this a "B" slot?
+    // This prevents writing to random empty cells if logic drifts.
+    // e.g. "B10", "B11" matches. "B" or "Box" does not.
+    var isBSlot = slotID.startsWith("B") && !isNaN(parseInt(slotID.substring(1)));
+
+    // Case 1: We haven't found the first B10 yet.
+    if (!startScanning) {
+      if (isBSlot) {
+        startScanning = true; // Found the first valid slot (e.g., B10)
+        // CRITICAL: Do NOT 'continue'. We must process THIS row immediately.
+      }
     }
 
+    // Case 2: We are inside the list (Processing B10, B11, etc.)
     if (startScanning) {
-      if (slotID === "B33" || (slotID.indexOf("B") === 0 && parseInt(slotID.substring(1)) > 32)) {
-         break; 
+      if (slotID === "B33" || (slotID.startsWith("B") && parseInt(slotID.substring(1)) > 32)) {
+         break; // End of list (B33 is stop)
       }
 
+      // If desc is empty, we found our target
       if (desc === "") {
-        targetRowIndex = i + 1; 
+        targetRowIndex = startScanRow + i; // Convert relative index i back to absolute row
         break; 
       }
     }
   }
 
   if (targetRowIndex === -1) {
-    throw new Error("Configuration List (B10-B32) is full. Please clear some rows.");
+    throw new Error("Configuration List is full (B10-B32) or could not be located at 'CONFIGURATION' header.");
   }
 
+  // WRITE DATA (Same as before)
   sheet.getRange(targetRowIndex, 8).setValue(payload.moduleDesc);
   sheet.getRange(targetRowIndex, 9).setValue(payload.numberVision || 1);
   sheet.getRange(targetRowIndex, 11).setValue(payload.moduleID);
@@ -288,7 +330,8 @@ function saveConfiguration(payload) {
      }
   }
 
-  return { status: "success", slot: "B" + (targetRowIndex - (lastRow - 32)) }; // Simplified Slot return
+  var slotLabel = sheet.getRange(targetRowIndex, 7).getValue(); 
+  return { status: "success", slot: slotLabel }; 
 }
 
 // =======================================================
@@ -352,7 +395,7 @@ function buildMasterDictionary() {
 
 /**
  * B. Extract Data for Production
- * UPDATED PHASE 4.6 (Item Number Logic Change)
+ * UPDATED PHASE 5 (Item Number Logic Change)
  */
 function extractProductionData() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -362,8 +405,20 @@ function extractProductionData() {
   var masterDict = buildMasterDictionary();
   var lastRow = sheet.getLastRow();
   
-  var headerRow = sheet.getRange(6, 1, 1, 18).getValues()[0];
-  var rawData = sheet.getRange(1, 1, lastRow, 18).getValues();
+  // UPDATED PHASE 6: Dynamic Header Reading
+  var vcmFinder = sheet.getRange("B:B").createTextFinder("VCM").matchEntireCell(true).findNext();
+  if (!vcmFinder) throw new Error("Critical Error: 'VCM' anchor not found. Cannot extract configuration.");
+  
+  var vcmRowIndex = vcmFinder.getRow();
+  
+  // Read the Header Row (e.g., "Voice Coil (Direct)...") which is at vcmRowIndex
+  // B:F (Cols 2-6)
+  var headerData = sheet.getRange(vcmRowIndex, 2, 1, 5).getValues()[0];
+  var headerRow = [null, headerData[0], headerData[1], headerData[2], headerData[3], headerData[4]]; 
+  
+  // Data Range: From VCM Row + 2 downwards
+  var startDataRow = vcmRowIndex + 2;
+  var rawData = sheet.getRange(startDataRow, 1, lastRow - startDataRow + 1, 18).getValues();
 
   var payload = {
     MODULE: [],
@@ -385,7 +440,10 @@ function extractProductionData() {
     var syncStatus = String(row[9]).trim(); // Col J
     var moduleID = String(row[10]).trim();  // Col K
     
-    if (turretName === "B10") startScanning = true;
+    // Dynamic start check
+    if (!startScanning && turretName.startsWith("B") && !isNaN(parseInt(turretName.substring(1)))) {
+       startScanning = true;
+    }
     
     if (turretName === "B33" || (turretName.startsWith("B") && parseInt(turretName.substring(1)) > 32)) {
       break;
@@ -395,7 +453,7 @@ function extractProductionData() {
       if (moduleID === "") continue; 
       if (syncStatus === "SYNCED") continue; 
 
-      payload.rowsToMarkSynced.push({row: i + 1});
+      payload.rowsToMarkSynced.push({row: startDataRow + i}); // Use absolute row
       
       var globalQty = parseInt(row[8]); 
       if (isNaN(globalQty) || globalQty < 1) globalQty = 1;
@@ -445,7 +503,8 @@ function extractProductionData() {
         return { id: "", desc: "" };
       }
 
-      // VCM
+      // VCM (Indices shifted because row array is 0-indexed)
+      // row[1] = Col B
       if (row[1] === true) {
          var d = parseHeaderData(headerRow[1]);
          pushItem("VCM", d.id, d.desc, true); 
