@@ -1,12 +1,15 @@
 /**
  * ConfiguratorBackend.gs
  * Server-side logic for the Module Configurator UI.
- * UPDATED: Phase 6 (Dynamic Anchor Scanning & Strict "CONFIGURATION" Fence)
+ * UPDATED: Phase 6 (Machine Setup - Vision PC)
  */
 
 // --- CONSTANTS ---
 var RUBBER_TIP_PARENTS_BACKEND = ["430001-A689", "430001-A690", "430001-A691", "430001-A692"];
 var RUBBER_TIP_SOURCE_ID_BACKEND = "430001-A380";
+
+// NEW: Vision PC Target IDs
+var VISION_PC_IDS = ["430001-A366", "430001-A367"];
 
 /**
  * 1. Get List of Modules (ID and Description)
@@ -30,6 +33,38 @@ function getModuleList() {
     }
   }
   return modules;
+}
+
+/**
+ * 1.5 Get Vision PC Options (Hybrid Strategy)
+ * Fetches descriptions for specific hardcoded IDs from REF_DATA
+ */
+function getVisionPCOptions() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("REF_DATA");
+  if (!sheet) return [];
+  
+  var lastRow = sheet.getLastRow();
+  // Columns A & B are Part ID & Description (Cols 1 & 2)
+  var rawValues = sheet.getRange(1, 1, lastRow, 2).getValues();
+  
+  var options = [];
+  
+  // Create a quick lookup map for performance
+  var lookupMap = {};
+  for (var i = 0; i < rawValues.length; i++) {
+    var rId = String(rawValues[i][0]).trim();
+    var rDesc = String(rawValues[i][1]).trim();
+    if (rId) lookupMap[rId] = rDesc;
+  }
+  
+  // Build result based on HARDCODED Target IDs
+  for (var j = 0; j < VISION_PC_IDS.length; j++) {
+    var targetID = VISION_PC_IDS[j];
+    var foundDesc = lookupMap[targetID] || "Description not found";
+    options.push({ id: targetID, desc: foundDesc });
+  }
+  
+  return options;
 }
 
 /**
@@ -332,6 +367,23 @@ function saveConfiguration(payload) {
 
   var slotLabel = sheet.getRange(targetRowIndex, 7).getValue(); 
   return { status: "success", slot: slotLabel }; 
+}
+
+/**
+ * 3.5 SAVE MACHINE SETUP (Phase 6)
+ * Writes Vision PC and other setup items to specific header cells.
+ */
+function saveMachineSetup(payload) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
+  if (!sheet) throw new Error("Sheet 'TRIAL-LAYOUT CONFIGURATION' not found.");
+  
+  // Save Vision PC to C2 (Row 2, Col 3)
+  if (payload.visionPC) {
+    sheet.getRange(2, 3).setValue(payload.visionPC);
+  }
+  
+  return { status: "success" };
 }
 
 // =======================================================
