@@ -1,7 +1,7 @@
 /**
  * ConfiguratorBackend.gs
  * Server-side logic for the Module Configurator UI.
- * UPDATED: Phase 6 (Machine Setup - Vision PC)
+ * UPDATED: Phase 6 (Machine Setup - Config Base Module Formatting Fix)
  */
 
 // --- CONSTANTS ---
@@ -66,6 +66,37 @@ function getVisionPCOptions() {
   
   return options;
 }
+
+/**
+ * 1.6 Get Configurable Base Module Options
+ * Fetches from REF_DATA Columns I & J
+ */
+function getBaseModuleOptions() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("REF_DATA");
+  if (!sheet) return [];
+  
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 1) return [];
+
+  // Columns I (9) and J (10)
+  var rawValues = sheet.getRange(1, 9, lastRow, 2).getValues();
+  var options = [];
+
+  for (var i = 0; i < rawValues.length; i++) {
+    var id = String(rawValues[i][0]).trim();
+    var desc = String(rawValues[i][1]).trim();
+    
+    // Filter Logic:
+    // 1. Exclude empty IDs
+    // 2. Exclude "Part ID" header
+    // 3. Exclude "List-" or "---" headers
+    if (id && id !== "Part ID" && !id.toUpperCase().startsWith("LIST-") && id.indexOf("---") === -1) {
+       options.push({ id: id, desc: desc });
+    }
+  }
+  return options;
+}
+
 
 /**
  * 2. Get Full Details for Selected Module
@@ -371,16 +402,82 @@ function saveConfiguration(payload) {
 
 /**
  * 3.5 SAVE MACHINE SETUP (Phase 6)
- * Writes Vision PC and other setup items to specific header cells.
+ * Writes Vision PC and Configurable Base Module items.
+ * Uses "Smart Insert" to manage variable list length without overwriting subsequent sections.
  */
 function saveMachineSetup(payload) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
   if (!sheet) throw new Error("Sheet 'TRIAL-LAYOUT CONFIGURATION' not found.");
   
-  // Save Vision PC to C2 (Row 2, Col 3)
+  // 1. Save Vision PC (C2)
   if (payload.visionPC) {
     sheet.getRange(2, 3).setValue(payload.visionPC);
+  }
+  
+  // 2. Save Configurable Base Modules
+  if (payload.baseModules && Array.isArray(payload.baseModules)) {
+    // A. Locate Anchors (UPDATED: Fuzzy Search & Range A:B)
+    var startFinder = sheet.getRange("A:B").createTextFinder("Configurable Base Module").matchEntireCell(false).findNext();
+    var endFinder = sheet.getRange("A:B").createTextFinder("Base Module Tooling").matchEntireCell(false).findNext();
+
+    if (!startFinder || !endFinder) {
+       throw new Error("Critical Error: Could not find 'Configurable Base Module' or 'Base Module Tooling' headers.");
+    }
+    
+    var startRow = startFinder.getRow(); // Row where "Configurable Base Module" is (Data starts in Col C of this row)
+    var nextSectionRow = endFinder.getRow();
+    
+    // B. Calculate Gap
+    var currentGap = nextSectionRow - startRow; 
+    
+    // C. Calculate Requirements
+    var itemsToSave = payload.baseModules;
+    var requiredSlots = Math.max(itemsToSave.length, 3); // Enforce minimum 3 slots
+    
+    // D. Adjust Rows (Smart Insert/Delete)
+    if (requiredSlots > currentGap) {
+       // Need more space. Insert rows BEFORE the Next Section Header.
+       var rowsNeeded = requiredSlots - currentGap;
+       sheet.insertRowsBefore(nextSectionRow, rowsNeeded);
+       
+       // FORMATTING FIXES (Phase 6b)
+       // 1. Reset Rotation (Inherited from header usually)
+       // 2. Vertical Alignment
+       var newRowsRange = sheet.getRange(nextSectionRow, 1, rowsNeeded, sheet.getLastColumn());
+       newRowsRange.setTextRotation(0).setVerticalAlignment("middle");
+       
+    } else if (requiredSlots < currentGap) {
+       // Too much space. Delete extra rows from bottom up
+       var rowsToDelete = currentGap - requiredSlots;
+       if (rowsToDelete > 0) {
+         sheet.deleteRows(startRow + requiredSlots, rowsToDelete);
+       }
+    }
+    
+    // E. Write Data & Merge Cells
+    // We now have exactly 'requiredSlots' available starting at startRow.
+    for (var i = 0; i < requiredSlots; i++) {
+       var targetRow = startRow + i;
+       var val = (i < itemsToSave.length) ? itemsToSave[i] : ""; // Write Value or Clear
+       
+       // Write Value to Col C
+       var cell = sheet.getRange(targetRow, 3);
+       cell.setValue(val);
+       
+       // FORMATTING FIX (Phase 6b): Merge C to G
+       // Range: Row, Col 3 (C), 1 row, 5 columns (C,D,E,F,G)
+       var mergeRange = sheet.getRange(targetRow, 3, 1, 5);
+       try {
+         // Only merge if not already merged to avoid errors (or just call merge() which is safe)
+         if (!mergeRange.isPartOfMerge() || mergeRange.getMergedRanges().length > 1) {
+            mergeRange.merge();
+         }
+         mergeRange.setVerticalAlignment("middle");
+       } catch(e) {
+         // Ignore merge errors if complex merge exists
+       }
+    }
   }
   
   return { status: "success" };
