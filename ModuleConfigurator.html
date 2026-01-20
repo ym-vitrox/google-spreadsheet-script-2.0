@@ -29,6 +29,11 @@
     input[type="text"].hidden { display: none; }
     input[type="text"] { margin-top: 5px; }
     
+    /* Dynamic List Styling */
+    .row-item { margin-bottom: 8px; }
+    .small-btn { width: auto; font-size: 12px; padding: 6px 12px; background-color: #8e44ad; }
+    .small-btn:hover { background-color: #7d3c98; }
+    
     /* Radio Styling */
     .radio-group { margin-bottom: 10px; }
     .radio-item { display: flex; align-items: start; margin-bottom: 6px; font-size: 12px; color: #2c3e50; }
@@ -183,10 +188,11 @@
           <input type="text" id="visionPCOtherInput" class="hidden" placeholder="Enter Custom Part ID (Required)">
       </div>
 
-      <!-- Placeholders for Future Items -->
-      <div class="card setup" style="opacity: 0.6;">
-          <span class="label">2. Configurable Base Module (Coming Soon)</span>
-          <div class="read-only-text">Pending Implementation</div>
+      <!-- 2. Configurable Base Module (Updated) -->
+      <div class="card setup">
+          <span class="label">2. Configurable Base Module</span>
+          <div id="baseModuleList"></div>
+          <button id="btnAddBaseModule" class="small-btn" onclick="addBaseModuleRow()" style="margin-top:8px;">+ Add Module</button>
       </div>
       
        <div class="card setup" style="opacity: 0.6;">
@@ -201,9 +207,11 @@
   </div>
 
   <script>
-    // GLOBAL STATE to hold raw data
+    // GLOBAL STATE
     var currentConfigData = null;
     var isSetupLoaded = false;
+    var baseModuleOptions = []; // Cache options
+    var MAX_BASE_MODULES = 0; // Will match option count
 
     window.onload = function() {
       // Load Module Data on Start
@@ -227,11 +235,13 @@
             // Lazy Load Setup Data only once
             if (!isSetupLoaded) {
                 loadSetupData();
+                loadBaseModuleData(); // Trigger Base Module Data Fetch
             }
         }
     }
 
-    // --- MACHINE SETUP LOGIC (NEW) ---
+    // --- MACHINE SETUP LOGIC ---
+
     function loadSetupData() {
         var sel = document.getElementById("visionPCSelect");
         sel.innerHTML = '<option value="" disabled selected>Loading...</option>';
@@ -242,6 +252,98 @@
         }).getVisionPCOptions();
     }
 
+    // --- Configurable Base Module Logic (New) ---
+    function loadBaseModuleData() {
+        google.script.run.withSuccessHandler(function(options) {
+            baseModuleOptions = options;
+            MAX_BASE_MODULES = options.length;
+            renderBaseModuleRows(3); // Default 3 rows
+        }).getBaseModuleOptions();
+    }
+
+    function renderBaseModuleRows(count) {
+        var container = document.getElementById("baseModuleList");
+        container.innerHTML = "";
+        for (var i = 0; i < count; i++) {
+            createBaseModuleDropdown(container);
+        }
+    }
+
+    function createBaseModuleDropdown(container) {
+        var div = document.createElement("div");
+        div.className = "row-item";
+        
+        var select = document.createElement("select");
+        select.className = "base-mod-select";
+        select.onchange = validateBaseModules; // Attach de-duplication
+        
+        var defaultOpt = document.createElement("option");
+        defaultOpt.value = "";
+        defaultOpt.text = "Select Module...";
+        select.appendChild(defaultOpt);
+        
+        baseModuleOptions.forEach(function(opt) {
+            var el = document.createElement("option");
+            el.value = opt.id;
+            el.text = opt.id + " | " + opt.desc;
+            select.appendChild(el);
+        });
+
+        div.appendChild(select);
+        container.appendChild(div);
+        
+        validateBaseModules(); // Run check immediately to set button state
+    }
+
+    function addBaseModuleRow() {
+        var container = document.getElementById("baseModuleList");
+        var currentCount = container.children.length;
+        
+        if (currentCount >= MAX_BASE_MODULES) {
+            alert("No more options available to add.");
+            return;
+        }
+        createBaseModuleDropdown(container);
+    }
+
+    // Visual De-Duplication Strategy
+    function validateBaseModules() {
+        var selects = document.querySelectorAll(".base-mod-select");
+        var usedValues = [];
+        
+        // Collect currently selected values
+        selects.forEach(function(s) {
+            if (s.value) usedValues.push(s.value);
+        });
+
+        // Gray out used values in ALL dropdowns
+        selects.forEach(function(s) {
+            var currentVal = s.value;
+            for (var i = 0; i < s.options.length; i++) {
+                var opt = s.options[i];
+                if (opt.value === "") continue;
+                
+                // Disable if used elsewhere (in usedValues list BUT not this specific select's value)
+                if (usedValues.includes(opt.value) && opt.value !== currentVal) {
+                    opt.disabled = true;
+                    opt.style.color = "#ccc";
+                } else {
+                    opt.disabled = false;
+                    opt.style.color = "#333";
+                }
+            }
+        });
+        
+        // Disable Add Button if all options used
+        var btn = document.getElementById("btnAddBaseModule");
+        if (selects.length >= MAX_BASE_MODULES) {
+            btn.style.display = "none";
+        } else {
+            btn.style.display = "inline-block";
+        }
+    }
+
+    // --- Vision PC Helpers ---
     function renderVisionPCOptions(options) {
         var sel = document.getElementById("visionPCSelect");
         sel.innerHTML = '<option value="" disabled selected>Select Vision PC...</option>';
@@ -269,7 +371,7 @@
             input.focus();
         } else {
             input.classList.add("hidden");
-            input.value = ""; // Clear manual input if they switch back
+            input.value = ""; 
         }
     }
 
@@ -295,6 +397,15 @@
         } else {
             payload.visionPC = visionVal;
         }
+
+        // 2. Configurable Base Module Logic
+        payload.baseModules = [];
+        var baseSelects = document.querySelectorAll(".base-mod-select");
+        baseSelects.forEach(function(s) {
+            if (s.value) {
+                payload.baseModules.push(s.value);
+            }
+        });
         
         // UI Feedback
         var btn = document.getElementById("btnSaveSetup");
