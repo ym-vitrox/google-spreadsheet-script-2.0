@@ -195,9 +195,12 @@
           <button id="btnAddBaseModule" class="small-btn" onclick="addBaseModuleRow()" style="margin-top:8px;">+ Add Module</button>
       </div>
       
-       <div class="card setup" style="opacity: 0.6;">
-          <span class="label">3. Base Module Tooling (Coming Soon)</span>
-           <div class="read-only-text">Pending Implementation</div>
+      <!-- 3. Base Module Tooling (NEW) -->
+      <div class="card setup">
+          <span class="label">3. Base Module Tooling</span>
+          <div id="baseToolingList">
+             <div class="read-only-text">Loading...</div>
+          </div>
       </div>
 
       <div class="btn-group">
@@ -212,6 +215,7 @@
     var isSetupLoaded = false;
     var baseModuleOptions = []; // Cache options
     var MAX_BASE_MODULES = 0; // Will match option count
+    var baseToolingData = []; // Cache tooling list
 
     window.onload = function() {
       // Load Module Data on Start
@@ -235,7 +239,8 @@
             // Lazy Load Setup Data only once
             if (!isSetupLoaded) {
                 loadSetupData();
-                loadBaseModuleData(); // Trigger Base Module Data Fetch
+                loadBaseModuleData(); 
+                loadBaseModuleTooling(); // Trigger Tooling Fetch
             }
         }
     }
@@ -252,7 +257,7 @@
         }).getVisionPCOptions();
     }
 
-    // --- Configurable Base Module Logic (New) ---
+    // --- Configurable Base Module Logic ---
     function loadBaseModuleData() {
         google.script.run.withSuccessHandler(function(options) {
             baseModuleOptions = options;
@@ -343,6 +348,54 @@
         }
     }
 
+    // --- Base Module Tooling Logic (NEW) ---
+    function loadBaseModuleTooling() {
+       google.script.run.withSuccessHandler(function(tools) {
+          baseToolingData = tools; // Cache
+          renderBaseModuleTooling();
+       }).getBaseModuleToolingList();
+    }
+
+    function renderBaseModuleTooling() {
+       var container = document.getElementById("baseToolingList");
+       container.innerHTML = "";
+       
+       if (baseToolingData.length === 0) {
+          container.innerHTML = '<div class="read-only-text">No Base Tooling Found.</div>';
+          return;
+       }
+
+       baseToolingData.forEach(function(tool) {
+          var div = document.createElement("div");
+          div.className = "row-item";
+          div.dataset.toolId = tool.id; // Store ID for collection
+
+          var label = document.createElement("span");
+          label.className = "part-id";
+          label.textContent = tool.id; // STRICTLY ID ONLY (No Description)
+          div.appendChild(label);
+
+          if (tool.options && tool.options.length > 0) {
+             // Has Options -> Show Dropdown
+             var select = document.createElement("select");
+             select.className = "tool-opt-select";
+             select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
+             select.innerHTML += buildCategorizedOptions(tool.options);
+             div.appendChild(select);
+          } else {
+             // No Options -> Read Only Text
+             var info = document.createElement("div");
+             info.className = "read-only-text";
+             info.style.marginTop = "4px";
+             info.style.color = "#7f8c8d";
+             info.textContent = "Auto-Included (No Options)";
+             div.appendChild(info);
+          }
+          
+          container.appendChild(div);
+       });
+    }
+
     // --- Vision PC Helpers ---
     function renderVisionPCOptions(options) {
         var sel = document.getElementById("visionPCSelect");
@@ -407,6 +460,35 @@
             }
         });
         
+        // 3. Base Module Tooling Logic (NEW)
+        payload.baseTooling = [];
+        var toolRows = document.querySelectorAll("#baseToolingList .row-item");
+        toolRows.forEach(function(row) {
+           var toolId = row.dataset.toolId;
+           var select = row.querySelector("select.tool-opt-select");
+           var optionVal = select ? select.value : null;
+           
+           if (select && !optionVal) {
+               // If there is a dropdown but nothing selected -> Alert?
+               // For now, let's treat it as incomplete, but we won't block saving unless you want Strict Validation.
+               // Let's assume mandatory if dropdown exists.
+           }
+           
+           if (toolId) {
+               payload.baseTooling.push({
+                   id: toolId,
+                   option: optionVal
+               });
+           }
+        });
+        
+        // Validation: Check if any tooling option is missing
+        var missingOpts = payload.baseTooling.filter(t => document.querySelector(`div[data-tool-id="${t.id}"] select`) && !t.option);
+        if (missingOpts.length > 0) {
+           alert("Please select options for all Base Module Tooling items.");
+           return;
+        }
+
         // UI Feedback
         var btn = document.getElementById("btnSaveSetup");
         btn.disabled = true;
