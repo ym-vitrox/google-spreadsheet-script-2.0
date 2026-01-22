@@ -33,6 +33,10 @@
     .row-item { margin-bottom: 8px; }
     .small-btn { width: auto; font-size: 12px; padding: 6px 12px; background-color: #8e44ad; }
     .small-btn:hover { background-color: #7d3c98; }
+    .link-btn { color: #3498db; font-size: 12px; text-decoration: underline; cursor: pointer; margin-left: 4px; }
+    
+    /* Remove Button */
+    .remove-btn { color: #e74c3c; font-weight: bold; cursor: pointer; margin-left: 5px; font-size: 14px; }
     
     /* Radio Styling */
     .radio-group { margin-bottom: 10px; }
@@ -57,6 +61,9 @@
     .required-select { border: 2px solid #e74c3c; background-color: #fffafa; margin-top: 5px; }
     .alert-label { color: #e74c3c; font-size: 10px; font-weight: 800; margin-top: 6px; display: block; }
     
+    /* Group Label for Categories */
+    .group-label { font-size: 11px; font-weight: bold; color: #555; margin-top: 8px; margin-bottom: 2px; text-transform: uppercase; }
+
     /* Buttons */
     .btn-group { margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px; }
     button { width: 100%; padding: 10px; background-color: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-bottom: 5px; }
@@ -216,6 +223,9 @@
     var baseModuleOptions = []; // Cache options
     var MAX_BASE_MODULES = 0; // Will match option count
     var baseToolingData = []; // Cache tooling list
+    
+    // Cache for Multi-Select Options
+    var multiSelectCache = {};
 
     window.onload = function() {
       // Load Module Data on Start
@@ -348,7 +358,7 @@
         }
     }
 
-    // --- Base Module Tooling Logic (NEW) ---
+    // --- Base Module Tooling Logic (UPDATED FOR PHASE 6 HYBRID + MULTI-SELECT + CATEGORIZED) ---
     function loadBaseModuleTooling() {
        google.script.run.withSuccessHandler(function(tools) {
           baseToolingData = tools; // Cache
@@ -359,6 +369,7 @@
     function renderBaseModuleTooling() {
        var container = document.getElementById("baseToolingList");
        container.innerHTML = "";
+       multiSelectCache = {}; // Reset Cache
        
        if (baseToolingData.length === 0) {
           container.innerHTML = '<div class="read-only-text">No Base Tooling Found.</div>';
@@ -368,32 +379,176 @@
        baseToolingData.forEach(function(tool) {
           var div = document.createElement("div");
           div.className = "row-item";
-          div.dataset.toolId = tool.id; // Store ID for collection
+          div.dataset.toolId = tool.id;
 
+          // PARENT ID LABEL
           var label = document.createElement("span");
           label.className = "part-id";
-          label.textContent = tool.id; // STRICTLY ID ONLY (No Description)
+          label.textContent = tool.id + (tool.desc ? " | " + tool.desc : "");
           div.appendChild(label);
 
-          if (tool.options && tool.options.length > 0) {
-             // Has Options -> Show Dropdown
+          // --- LOGIC SPLIT: COMPLEX vs CATEGORIZED vs MULTI-SELECT vs STANDARD ---
+          
+          if (tool.type === 'CATEGORIZED_MULTI') {
+             // 1. Loop through Groups
+             div.dataset.toolType = 'CATEGORIZED_MULTI';
+             tool.groups.forEach(function(grp, index) {
+                 var groupLabel = document.createElement("div");
+                 groupLabel.className = "group-label";
+                 groupLabel.textContent = grp.name;
+                 div.appendChild(groupLabel);
+                 
+                 if (grp.type === 'single') {
+                     // Single Select Dropdown
+                     var select = document.createElement("select");
+                     select.className = "tool-opt-select categorized-single-select";
+                     select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
+                     select.innerHTML += buildCategorizedOptions(grp.options);
+                     select.setAttribute("required", "true");
+                     div.appendChild(select);
+                 } else {
+                     // Multi Select Logic (Reusing addMultiSelectRow)
+                     var multiContainer = document.createElement("div");
+                     multiContainer.className = "multi-select-container categorized-multi-select-container";
+                     div.appendChild(multiContainer);
+                     
+                     // Cache options with unique key for this group
+                     var cacheKey = tool.id + "_group_" + index;
+                     multiSelectCache[cacheKey] = grp.options;
+                     
+                     // Add Initial Row
+                     addMultiSelectRow(cacheKey, multiContainer);
+                     
+                     // Add Button
+                     var addBtn = document.createElement("div");
+                     addBtn.className = "link-btn";
+                     addBtn.textContent = "+ Add Another " + grp.name;
+                     addBtn.onclick = function() { addMultiSelectRow(cacheKey, multiContainer); };
+                     div.appendChild(addBtn);
+                 }
+             });
+             
+          } else if (tool.type === 'COMPLEX') {
+             // ... [Existing Complex Logic] ...
+             var mandatoryBox = document.createElement("div");
+             mandatoryBox.className = "read-only-text";
+             mandatoryBox.style.marginBottom = "6px";
+             mandatoryBox.style.backgroundColor = "#e8eaed"; 
+             mandatoryBox.innerHTML = "🔒 <b>Included:</b> " + tool.mandatoryItem.id + " (" + (tool.mandatoryItem.desc || "") + ")";
+             div.appendChild(mandatoryBox);
+             
+             div.dataset.mandatoryId = tool.mandatoryItem.id;
+             div.dataset.toolType = "COMPLEX";
+
              var select = document.createElement("select");
              select.className = "tool-opt-select";
              select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
              select.innerHTML += buildCategorizedOptions(tool.options);
              div.appendChild(select);
+             
+          } else if (tool.type === 'MULTI_SELECT') {
+             // ... [Existing Multi Select Logic] ...
+             div.dataset.toolType = "MULTI_SELECT";
+             multiSelectCache[tool.id] = tool.options;
+             
+             var multiContainer = document.createElement("div");
+             multiContainer.id = "multi-container-" + tool.id;
+             multiContainer.className = "multi-select-container";
+             div.appendChild(multiContainer);
+             
+             addMultiSelectRow(tool.id, multiContainer);
+             
+             var addBtn = document.createElement("div");
+             addBtn.className = "link-btn";
+             addBtn.textContent = "+ Add Another Option";
+             addBtn.onclick = function() { addMultiSelectRow(tool.id, multiContainer); };
+             div.appendChild(addBtn);
+             
           } else {
-             // No Options -> Read Only Text
-             var info = document.createElement("div");
-             info.className = "read-only-text";
-             info.style.marginTop = "4px";
-             info.style.color = "#7f8c8d";
-             info.textContent = "Auto-Included (No Options)";
-             div.appendChild(info);
+             // Standard Logic
+             if (tool.options && tool.options.length > 0) {
+                 var select = document.createElement("select");
+                 select.className = "tool-opt-select";
+                 select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
+                 select.innerHTML += buildCategorizedOptions(tool.options);
+                 div.appendChild(select);
+             } else {
+                 var info = document.createElement("div");
+                 info.className = "read-only-text";
+                 info.style.marginTop = "4px";
+                 info.style.color = "#7f8c8d";
+                 info.textContent = "Auto-Included (No Options)";
+                 div.appendChild(info);
+             }
           }
           
           container.appendChild(div);
        });
+    }
+
+    // --- NEW: Multi-Select Helper Functions ---
+    function addMultiSelectRow(cacheKey, containerSource) {
+        var container = (typeof containerSource === 'string') ? document.getElementById(containerSource) : containerSource;
+        if (!container) return;
+
+        var options = multiSelectCache[cacheKey];
+        if (!options) return;
+        
+        var currentRows = container.querySelectorAll(".multi-select-row").length;
+        // Limit check optional but good practice
+        if (currentRows >= options.length && options.length > 0) { 
+            // alert("Max options reached."); 
+            // return; 
+        }
+
+        var rowDiv = document.createElement("div");
+        rowDiv.className = "row-item multi-select-row";
+        rowDiv.style.display = "flex";
+        rowDiv.style.alignItems = "center";
+        
+        var select = document.createElement("select");
+        // Unique class for validation scoping if needed, for now generic is fine
+        select.className = "tool-opt-select multi-select-input-" + cacheKey; 
+        select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
+        select.innerHTML += buildCategorizedOptions(options);
+        
+        // Validation Hook (Scope to this key)
+        select.onchange = function() { validateMultiSelect(cacheKey); };
+        
+        rowDiv.appendChild(select);
+        
+        if (currentRows > 0) {
+            var removeBtn = document.createElement("span");
+            removeBtn.className = "remove-btn";
+            removeBtn.innerHTML = "&times;";
+            removeBtn.onclick = function() {
+                container.removeChild(rowDiv);
+                validateMultiSelect(cacheKey); 
+            };
+            rowDiv.appendChild(removeBtn);
+        }
+
+        container.appendChild(rowDiv);
+        validateMultiSelect(cacheKey);
+    }
+    
+    function validateMultiSelect(cacheKey) {
+        var selects = document.querySelectorAll(".multi-select-input-" + cacheKey);
+        var usedValues = [];
+        selects.forEach(function(s) { if (s.value) usedValues.push(s.value); });
+        
+        selects.forEach(function(s) {
+            var currentVal = s.value;
+            for (var i = 0; i < s.options.length; i++) {
+                var opt = s.options[i];
+                if (opt.value === "") continue;
+                if (usedValues.includes(opt.value) && opt.value !== currentVal) {
+                    opt.disabled = true; opt.style.color = "#ccc";
+                } else {
+                    opt.disabled = false; opt.style.color = "#333";
+                }
+            }
+        });
     }
 
     // --- Vision PC Helpers ---
@@ -460,36 +615,87 @@
             }
         });
         
-        // 3. Base Module Tooling Logic (NEW)
+        // 3. Base Module Tooling Logic (UPDATED FOR CATEGORIZED MULTI)
         payload.baseTooling = [];
         var toolRows = document.querySelectorAll("#baseToolingList .row-item");
+        var missingSelection = false;
+
         toolRows.forEach(function(row) {
            var toolId = row.dataset.toolId;
-           var select = row.querySelector("select.tool-opt-select");
-           var optionVal = select ? select.value : null;
+           var toolType = row.dataset.toolType; 
            
-           if (select && !optionVal) {
-               // If there is a dropdown but nothing selected -> Alert?
-               // For now, let's treat it as incomplete, but we won't block saving unless you want Strict Validation.
-               // Let's assume mandatory if dropdown exists.
-           }
-           
-           if (toolId) {
-               payload.baseTooling.push({
-                   id: toolId,
-                   option: optionVal
+           // --- CATEGORIZED MULTI SAVE LOGIC ---
+           if (toolType === 'CATEGORIZED_MULTI') {
+               var allOptionsForThisTool = [];
+               
+               // 1. Collect Single Selects
+               var singleSelects = row.querySelectorAll(".categorized-single-select");
+               singleSelects.forEach(function(s) {
+                   if (s.value) allOptionsForThisTool.push(s.value);
+                   else missingSelection = true;
                });
+               
+               // 2. Collect Multi Selects (Dynamic Rows)
+               // Find all containers inside this row
+               var containers = row.querySelectorAll(".categorized-multi-select-container");
+               containers.forEach(function(cont) {
+                   var selects = cont.querySelectorAll("select"); // All dropdowns in this container
+                   var hasAtLeastOne = false;
+                   selects.forEach(function(s) {
+                       if (s.value) {
+                           allOptionsForThisTool.push(s.value);
+                           hasAtLeastOne = true;
+                       }
+                   });
+                   if (!hasAtLeastOne) missingSelection = true; // Optional group requirement: Must pick at least one
+               });
+               
+               if (allOptionsForThisTool.length > 0) {
+                   payload.baseTooling.push({
+                       id: toolId,
+                       options: allOptionsForThisTool // Merged Array
+                   });
+               }
+               
+           } else if (toolType === 'MULTI_SELECT') {
+               // ... [Existing Multi Logic] ...
+               var selects = row.querySelectorAll(".multi-select-input-" + toolId);
+               var selectedArr = [];
+               selects.forEach(function(s) {
+                  if (s.value) selectedArr.push(s.value);
+                  else missingSelection = true;
+               });
+               if (selectedArr.length > 0) {
+                   payload.baseTooling.push({ id: toolId, options: selectedArr });
+               }
+               
+           } else {
+               // ... [Existing Standard Logic] ...
+               var select = row.querySelector("select.tool-opt-select");
+               var selectedVal = select ? select.value : null;
+               if (select && !selectedVal) missingSelection = true;
+               
+               if (toolId) {
+                   var optionsArr = [];
+                   if (toolType === 'COMPLEX' && row.dataset.mandatoryId) {
+                       optionsArr.push(row.dataset.mandatoryId);
+                   }
+                   if (selectedVal) optionsArr.push(selectedVal);
+                   
+                   if (optionsArr.length > 0) {
+                       payload.baseTooling.push({ id: toolId, options: optionsArr });
+                   } else {
+                       if (!select) payload.baseTooling.push({ id: toolId, options: [] });
+                   }
+               }
            }
         });
         
-        // Validation: Check if any tooling option is missing
-        var missingOpts = payload.baseTooling.filter(t => document.querySelector(`div[data-tool-id="${t.id}"] select`) && !t.option);
-        if (missingOpts.length > 0) {
-           alert("Please select options for all Base Module Tooling items.");
+        if (missingSelection) {
+           alert("Please ensure all required tooling options are selected.");
            return;
         }
 
-        // UI Feedback
         var btn = document.getElementById("btnSaveSetup");
         btn.disabled = true;
         btn.textContent = "Saving...";
@@ -521,7 +727,7 @@
       });
     }
     
-    // (NEW) Render Radio Buttons for Layout
+    // Render Radio Buttons for Layout
     function renderLayoutSettings(data) {
       if (!data) return;
       
@@ -543,7 +749,6 @@
         });
       }
       
-      // Set Titles (Row 5 Data)
       if (data.group1) {
           document.getElementById("vcmTitle").textContent = data.group1.title;
           buildRadioGroup("vcmContainer", data.group1.options, "vcmGroup");
@@ -668,7 +873,6 @@
         spareCard.classList.add("hidden");
       }
       
-      // (NEW) Reset Quantity to 1
       document.getElementById("numVisionSelect").value = "1";
     }
     
