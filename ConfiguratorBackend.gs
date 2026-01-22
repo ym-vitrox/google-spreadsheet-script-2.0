@@ -1,7 +1,7 @@
 /**
  * ConfiguratorBackend.gs
  * Server-side logic for the Module Configurator UI.
- * UPDATED: Phase 6 (Machine Setup - Config Base Module Formatting Fix)
+ * UPDATED: Phase 6 (Machine Setup - Base Module Tooling Flattened List)
  */
 
 // --- CONSTANTS ---
@@ -95,6 +95,93 @@ function getBaseModuleOptions() {
     }
   }
   return options;
+}
+
+/**
+ * 1.7 Get Base Module Tooling List (Non-Paired Only)
+ * Logic: Fetch U:V, Exclude IDs found in Y:Z
+ */
+function getBaseModuleToolingList() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("REF_DATA");
+  if (!sheet) return [];
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 1) return [];
+
+  // 1. Fetch Data
+  // U:V = Cols 21-22 (Tooling Source)
+  // Y:Z = Cols 25-26 (Exclusion List)
+  var toolingRange = sheet.getRange(1, 21, lastRow, 2).getValues(); // U:V
+  var exclusionRange = sheet.getRange(1, 25, lastRow, 2).getValues(); // Y:Z
+
+  // 2. Build Exclusion Set
+  var excludedIDs = new Set();
+  for (var i = 0; i < exclusionRange.length; i++) {
+    var row = exclusionRange[i];
+    // Y (row[0]) and Z (row[1])
+    [row[0], row[1]].forEach(function(cellVal) {
+      if (cellVal) {
+        var str = String(cellVal).trim();
+        // Handle delimited IDs (e.g., "A; B; C")
+        var parts = str.split(/[;\n\r]+/); // Split by semicolon or newline
+        parts.forEach(function(p) {
+          var clean = p.trim();
+          if (clean) excludedIDs.add(clean);
+        });
+      }
+    });
+  }
+
+  // 3. Process Tooling List (U:V)
+  // We need to group by Parent ID (Col U) to avoid duplicates if U repeats
+  // But wait, fetchOptionsForTool handles the children. We just need the unique Parents.
+  var uniqueTools = [];
+  var seenParents = new Set();
+  
+  // We also need the full menu data for fetchOptionsForTool later
+  var menuData = toolingRange; // Reuse the U:V values
+
+  for (var j = 0; j < toolingRange.length; j++) {
+    var parentID = String(toolingRange[j][0]).trim();
+    var rawDescField = String(toolingRange[j][1]).trim(); // Col V
+
+    // Filter Logic
+    if (!parentID || parentID === "Part ID" || parentID.indexOf("---") > -1 || parentID.toUpperCase().startsWith("LIST-")) {
+      continue;
+    }
+    
+    // EXCLUSION LOGIC
+    if (excludedIDs.has(parentID)) {
+      continue;
+    }
+    
+    if (seenParents.has(parentID)) {
+      continue; // Already processed this parent
+    }
+    seenParents.add(parentID);
+
+    // 4. Parse Description from Col V
+    // Format: "OptionID :: Description" OR just "Description"
+    var finalDesc = rawDescField;
+    if (rawDescField.indexOf("::") > -1) {
+       var parts = rawDescField.split("::");
+       if (parts.length > 1) {
+          finalDesc = parts[1].trim(); // Take the description part
+       }
+    }
+    
+    // 5. Fetch Options
+    // Check if this tool has dropdown options
+    var options = fetchOptionsForTool(menuData, parentID);
+    
+    uniqueTools.push({
+       id: parentID,
+       desc: finalDesc,
+       options: options
+    });
+  }
+
+  return uniqueTools;
 }
 
 
@@ -402,8 +489,8 @@ function saveConfiguration(payload) {
 
 /**
  * 3.5 SAVE MACHINE SETUP (Phase 6)
- * Writes Vision PC and Configurable Base Module items.
- * Uses "Smart Insert" to manage variable list length without overwriting subsequent sections.
+ * Writes Vision PC, Configurable Base Module, AND Base Module Tooling.
+ * Uses "Smart Insert" to manage variable list lengths.
  */
 function saveMachineSetup(payload) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -417,66 +504,94 @@ function saveMachineSetup(payload) {
   
   // 2. Save Configurable Base Modules
   if (payload.baseModules && Array.isArray(payload.baseModules)) {
-    // A. Locate Anchors (UPDATED: Fuzzy Search & Range A:B)
     var startFinder = sheet.getRange("A:B").createTextFinder("Configurable Base Module").matchEntireCell(false).findNext();
     var endFinder = sheet.getRange("A:B").createTextFinder("Base Module Tooling").matchEntireCell(false).findNext();
 
-    if (!startFinder || !endFinder) {
-       throw new Error("Critical Error: Could not find 'Configurable Base Module' or 'Base Module Tooling' headers.");
+    if (startFinder && endFinder) {
+      var startRow = startFinder.getRow();
+      var nextSectionRow = endFinder.getRow();
+      var currentGap = nextSectionRow - startRow; 
+      var itemsToSave = payload.baseModules;
+      var requiredSlots = Math.max(itemsToSave.length, 3); 
+      
+      if (requiredSlots > currentGap) {
+         var rowsNeeded = requiredSlots - currentGap;
+         sheet.insertRowsBefore(nextSectionRow, rowsNeeded);
+         var newRowsRange = sheet.getRange(nextSectionRow, 1, rowsNeeded, sheet.getLastColumn());
+         newRowsRange.setTextRotation(0).setVerticalAlignment("middle");
+      } else if (requiredSlots < currentGap) {
+         var rowsToDelete = currentGap - requiredSlots;
+         if (rowsToDelete > 0) sheet.deleteRows(startRow + requiredSlots, rowsToDelete);
+      }
+      
+      for (var i = 0; i < requiredSlots; i++) {
+         var targetRow = startRow + i;
+         var val = (i < itemsToSave.length) ? itemsToSave[i] : ""; 
+         sheet.getRange(targetRow, 3).setValue(val);
+         var mergeRange = sheet.getRange(targetRow, 3, 1, 5);
+         try {
+           if (!mergeRange.isPartOfMerge() || mergeRange.getMergedRanges().length > 1) { mergeRange.merge(); }
+           mergeRange.setVerticalAlignment("middle");
+         } catch(e) {}
+      }
     }
-    
-    var startRow = startFinder.getRow(); // Row where "Configurable Base Module" is (Data starts in Col C of this row)
-    var nextSectionRow = endFinder.getRow();
-    
-    // B. Calculate Gap
-    var currentGap = nextSectionRow - startRow; 
-    
-    // C. Calculate Requirements
-    var itemsToSave = payload.baseModules;
-    var requiredSlots = Math.max(itemsToSave.length, 3); // Enforce minimum 3 slots
-    
-    // D. Adjust Rows (Smart Insert/Delete)
-    if (requiredSlots > currentGap) {
-       // Need more space. Insert rows BEFORE the Next Section Header.
-       var rowsNeeded = requiredSlots - currentGap;
-       sheet.insertRowsBefore(nextSectionRow, rowsNeeded);
-       
-       // FORMATTING FIXES (Phase 6b)
-       // 1. Reset Rotation (Inherited from header usually)
-       // 2. Vertical Alignment
-       var newRowsRange = sheet.getRange(nextSectionRow, 1, rowsNeeded, sheet.getLastColumn());
-       newRowsRange.setTextRotation(0).setVerticalAlignment("middle");
-       
-    } else if (requiredSlots < currentGap) {
-       // Too much space. Delete extra rows from bottom up
-       var rowsToDelete = currentGap - requiredSlots;
-       if (rowsToDelete > 0) {
-         sheet.deleteRows(startRow + requiredSlots, rowsToDelete);
-       }
-    }
-    
-    // E. Write Data & Merge Cells
-    // We now have exactly 'requiredSlots' available starting at startRow.
-    for (var i = 0; i < requiredSlots; i++) {
-       var targetRow = startRow + i;
-       var val = (i < itemsToSave.length) ? itemsToSave[i] : ""; // Write Value or Clear
-       
-       // Write Value to Col C
-       var cell = sheet.getRange(targetRow, 3);
-       cell.setValue(val);
-       
-       // FORMATTING FIX (Phase 6b): Merge C to G
-       // Range: Row, Col 3 (C), 1 row, 5 columns (C,D,E,F,G)
-       var mergeRange = sheet.getRange(targetRow, 3, 1, 5);
-       try {
-         // Only merge if not already merged to avoid errors (or just call merge() which is safe)
-         if (!mergeRange.isPartOfMerge() || mergeRange.getMergedRanges().length > 1) {
-            mergeRange.merge();
+  }
+
+  // 3. Save Base Module Tooling (NEW - FLATTENED LIST with TREE STYLE)
+  if (payload.baseTooling && Array.isArray(payload.baseTooling)) {
+    // A. Locate Anchors
+    var startFinder = sheet.getRange("A:B").createTextFinder("Base Module Tooling").matchEntireCell(false).findNext();
+    var endFinder = sheet.getRange("A:B").createTextFinder("Comment").matchEntireCell(false).findNext();
+
+    if (startFinder && endFinder) {
+      var startRow = startFinder.getRow();
+      var nextSectionRow = endFinder.getRow();
+      var currentGap = nextSectionRow - startRow;
+      
+      // B. Flatten Payload for writing
+      var linesToWrite = [];
+      for (var p = 0; p < payload.baseTooling.length; p++) {
+         var item = payload.baseTooling[p];
+         // 1. Parent ID (Row 1)
+         linesToWrite.push(item.id);
+         // 2. Child ID (Row 2, Indented)
+         if (item.option) {
+            linesToWrite.push("L " + item.option); // Tree Style
          }
-         mergeRange.setVerticalAlignment("middle");
-       } catch(e) {
-         // Ignore merge errors if complex merge exists
-       }
+      }
+      
+      var requiredSlots = linesToWrite.length;
+      if (requiredSlots === 0) requiredSlots = 1;
+
+      // C. Smart Insert / Delete Rows
+      if (requiredSlots > currentGap) {
+         var rowsNeeded = requiredSlots - currentGap;
+         sheet.insertRowsBefore(nextSectionRow, rowsNeeded);
+         // Apply formatting to new rows
+         var newRowsRange = sheet.getRange(nextSectionRow, 1, rowsNeeded, sheet.getLastColumn());
+         newRowsRange.setTextRotation(0).setVerticalAlignment("middle");
+      } else if (requiredSlots < currentGap) {
+         var rowsToDelete = currentGap - requiredSlots;
+         if (rowsToDelete > 0) sheet.deleteRows(startRow + requiredSlots, rowsToDelete);
+      }
+      
+      // D. Write Data
+      for (var k = 0; k < requiredSlots; k++) {
+         var targetRow = startRow + k;
+         
+         if (k < linesToWrite.length) {
+           sheet.getRange(targetRow, 3).setValue(linesToWrite[k]);
+         } else {
+           sheet.getRange(targetRow, 3).clearContent();
+         }
+         
+         // Merge C:G
+         var mergeRange = sheet.getRange(targetRow, 3, 1, 5);
+         try {
+           if (!mergeRange.isPartOfMerge() || mergeRange.getMergedRanges().length > 1) { mergeRange.merge(); }
+           mergeRange.setVerticalAlignment("middle");
+         } catch(e) {}
+      }
     }
   }
   
