@@ -1,15 +1,26 @@
 /**
  * ConfiguratorBackend.gs
  * Server-side logic for the Module Configurator UI.
- * UPDATED: Phase 6 (Machine Setup - Base Module Tooling Flattened List)
+ * UPDATED: Phase 6 (Machine Setup - Hybrid Logic / Single Header + Multi-Select + Categorized Multi)
  */
 
 // --- CONSTANTS ---
 var RUBBER_TIP_PARENTS_BACKEND = ["430001-A689", "430001-A690", "430001-A691", "430001-A692"];
 var RUBBER_TIP_SOURCE_ID_BACKEND = "430001-A380";
 
-// NEW: Vision PC Target IDs
+// Vision PC Target IDs
 var VISION_PC_IDS = ["430001-A366", "430001-A367"];
+
+// Complex Tooling Rules (Parent ID -> Mandatory Child ID)
+var COMPLEX_TOOL_RULES = {
+  "430001-A490": "430000-A748" // PUH Interface -> Assy-PUH Phoenix-v2.0
+};
+
+// Multi-Select Tools (Parent IDs that allow multiple option rows)
+var MULTI_SELECT_TOOLS = ["430001-A380", "430001-A495"]; 
+
+// NEW: Categorized Multi Tools (Complex Grouping)
+var CATEGORIZED_MULTI_TOOLS = ["430001-A494"]; // Die Ejector Tooling
 
 /**
  * 1. Get List of Modules (ID and Description)
@@ -98,8 +109,8 @@ function getBaseModuleOptions() {
 }
 
 /**
- * 1.7 Get Base Module Tooling List (Non-Paired Only)
- * Logic: Fetch U:V, Exclude IDs found in Y:Z
+ * 1.7 Get Base Module Tooling List (Hybrid Interceptor Logic)
+ * Logic: Fetch U:V, Exclude IDs found in Y:Z, Apply Complex Rules, Multi-Select & Categorized Logic
  */
 function getBaseModuleToolingList() {
   var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("REF_DATA");
@@ -109,8 +120,6 @@ function getBaseModuleToolingList() {
   if (lastRow < 1) return [];
 
   // 1. Fetch Data
-  // U:V = Cols 21-22 (Tooling Source)
-  // Y:Z = Cols 25-26 (Exclusion List)
   var toolingRange = sheet.getRange(1, 21, lastRow, 2).getValues(); // U:V
   var exclusionRange = sheet.getRange(1, 25, lastRow, 2).getValues(); // Y:Z
 
@@ -123,7 +132,7 @@ function getBaseModuleToolingList() {
       if (cellVal) {
         var str = String(cellVal).trim();
         // Handle delimited IDs (e.g., "A; B; C")
-        var parts = str.split(/[;\n\r]+/); // Split by semicolon or newline
+        var parts = str.split(/[;\n\r]+/);
         parts.forEach(function(p) {
           var clean = p.trim();
           if (clean) excludedIDs.add(clean);
@@ -133,12 +142,8 @@ function getBaseModuleToolingList() {
   }
 
   // 3. Process Tooling List (U:V)
-  // We need to group by Parent ID (Col U) to avoid duplicates if U repeats
-  // But wait, fetchOptionsForTool handles the children. We just need the unique Parents.
   var uniqueTools = [];
   var seenParents = new Set();
-  
-  // We also need the full menu data for fetchOptionsForTool later
   var menuData = toolingRange; // Reuse the U:V values
 
   for (var j = 0; j < toolingRange.length; j++) {
@@ -161,7 +166,6 @@ function getBaseModuleToolingList() {
     seenParents.add(parentID);
 
     // 4. Parse Description from Col V
-    // Format: "OptionID :: Description" OR just "Description"
     var finalDesc = rawDescField;
     if (rawDescField.indexOf("::") > -1) {
        var parts = rawDescField.split("::");
@@ -170,20 +174,98 @@ function getBaseModuleToolingList() {
        }
     }
     
-    // 5. Fetch Options
-    // Check if this tool has dropdown options
-    var options = fetchOptionsForTool(menuData, parentID);
+    // 5. Fetch Options & Apply Interceptor
     
-    uniqueTools.push({
-       id: parentID,
-       desc: finalDesc,
-       options: options
-    });
+    // --- CASE A: CATEGORIZED MULTI (e.g., Die Ejector) ---
+    if (CATEGORIZED_MULTI_TOOLS.includes(parentID)) {
+       // Fetch raw options but preserve structure
+       var groups = [];
+       var currentGroup = null;
+       
+       // Manually scan the menuData for this parentID
+       for (var m = 0; m < menuData.length; m++) {
+          if (String(menuData[m][0]) === parentID) {
+             var line = String(menuData[m][1]).trim();
+             
+             if (line.startsWith("---")) {
+                // New Group Detected
+                var groupName = line.replace(/---/g, "").trim();
+                var groupType = (groupName.indexOf("OPTIONAL") > -1) ? "multi" : "single";
+                
+                currentGroup = {
+                   name: groupName,
+                   type: groupType,
+                   options: []
+                };
+                groups.push(currentGroup);
+                
+             } else if (currentGroup && line) {
+                // Add Item to Current Group
+                var parts = line.split("::");
+                var id = parts[0].trim();
+                var desc = (parts.length > 1) ? parts[1].trim() : "";
+                currentGroup.options.push({ id: id, desc: desc });
+             }
+          }
+       }
+       
+       uniqueTools.push({
+          id: parentID,
+          desc: finalDesc,
+          type: 'CATEGORIZED_MULTI',
+          groups: groups
+       });
+    }
+    
+    // --- CASE B: COMPLEX RULES (e.g., PUH) ---
+    else if (COMPLEX_TOOL_RULES[parentID]) {
+       var mandatoryID = COMPLEX_TOOL_RULES[parentID];
+       var allOptions = fetchOptionsForTool(menuData, parentID);
+       
+       var mandatoryItem = null;
+       var selectableOptions = [];
+       
+       for (var k = 0; k < allOptions.length; k++) {
+          if (allOptions[k].id === mandatoryID) {
+             mandatoryItem = allOptions[k];
+          } else {
+             selectableOptions.push(allOptions[k]);
+          }
+       }
+       
+       uniqueTools.push({
+          id: parentID,
+          desc: finalDesc,
+          type: 'COMPLEX', // Flag for UI
+          mandatoryItem: mandatoryItem, // The Fixed Item
+          options: selectableOptions // The Dropdown Items
+       });
+       
+    } 
+    // --- CASE C: MULTI-SELECT TOOLS ---
+    else if (MULTI_SELECT_TOOLS.includes(parentID)) {
+       var options = fetchOptionsForTool(menuData, parentID);
+       uniqueTools.push({
+          id: parentID,
+          desc: finalDesc,
+          type: 'MULTI_SELECT', // Flag for UI
+          options: options
+       });
+    }
+    // --- CASE D: STANDARD ---
+    else {
+       var options = fetchOptionsForTool(menuData, parentID);
+       uniqueTools.push({
+          id: parentID,
+          desc: finalDesc,
+          type: 'STANDARD',
+          options: options
+       });
+    }
   }
 
   return uniqueTools;
 }
-
 
 /**
  * 2. Get Full Details for Selected Module
@@ -404,22 +486,14 @@ function saveConfiguration(payload) {
   var lastRow = sheet.getLastRow();
   
   // STEP 1: Find the "CONFIGURATION" Fence
-  // This header marks the absolute start of the list. We MUST write below it (or at the same level if merged).
   var configHeaderFinder = sheet.getRange("A:B").createTextFinder("CONFIGURATION").matchEntireCell(true).findNext();
   
   if (!configHeaderFinder) {
     throw new Error("Critical Error: 'CONFIGURATION' header not found in Column A or B. Cannot safely locate list start.");
   }
 
-  // Use the exact row where "CONFIGURATION" is found.
-  // Because "CONFIGURATION" (Col A) and "B10" (Col G) are on the same row,
-  // we start scanning AT this row, not +1.
   var startScanRow = configHeaderFinder.getRow();
   
-  if (startScanRow > lastRow) {
-     // Safety check if sheet is malformed
-  }
-
   // Scan Column G (Turret Location) starting from the header row downwards
   var scanRange = sheet.getRange(startScanRow, 7, lastRow - startScanRow + 1, 2).getValues();
 
@@ -431,19 +505,14 @@ function saveConfiguration(payload) {
     var desc = String(scanRange[i][1]).trim();   // Col H
 
     // STRICT VALIDATION: Is this a "B" slot?
-    // This prevents writing to random empty cells if logic drifts.
-    // e.g. "B10", "B11" matches. "B" or "Box" does not.
     var isBSlot = slotID.startsWith("B") && !isNaN(parseInt(slotID.substring(1)));
 
-    // Case 1: We haven't found the first B10 yet.
     if (!startScanning) {
       if (isBSlot) {
         startScanning = true; // Found the first valid slot (e.g., B10)
-        // CRITICAL: Do NOT 'continue'. We must process THIS row immediately.
       }
     }
 
-    // Case 2: We are inside the list (Processing B10, B11, etc.)
     if (startScanning) {
       if (slotID === "B33" || (slotID.startsWith("B") && parseInt(slotID.substring(1)) > 32)) {
          break; // End of list (B33 is stop)
@@ -461,7 +530,7 @@ function saveConfiguration(payload) {
     throw new Error("Configuration List is full (B10-B32) or could not be located at 'CONFIGURATION' header.");
   }
 
-  // WRITE DATA (Same as before)
+  // WRITE DATA
   sheet.getRange(targetRowIndex, 8).setValue(payload.moduleDesc);
   sheet.getRange(targetRowIndex, 9).setValue(payload.numberVision || 1);
   sheet.getRange(targetRowIndex, 11).setValue(payload.moduleID);
@@ -490,7 +559,7 @@ function saveConfiguration(payload) {
 /**
  * 3.5 SAVE MACHINE SETUP (Phase 6)
  * Writes Vision PC, Configurable Base Module, AND Base Module Tooling.
- * Uses "Smart Insert" to manage variable list lengths.
+ * UPDATED: Handles "One Header, Multiple Options" (Arrays) for Complex & Multi-Select Tooling.
  */
 function saveMachineSetup(payload) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -537,9 +606,8 @@ function saveMachineSetup(payload) {
     }
   }
 
-  // 3. Save Base Module Tooling (NEW - FLATTENED LIST with TREE STYLE)
+  // 3. Save Base Module Tooling (UPDATED FOR SINGLE HEADER / MULTI-OPTION)
   if (payload.baseTooling && Array.isArray(payload.baseTooling)) {
-    // A. Locate Anchors
     var startFinder = sheet.getRange("A:B").createTextFinder("Base Module Tooling").matchEntireCell(false).findNext();
     var endFinder = sheet.getRange("A:B").createTextFinder("Comment").matchEntireCell(false).findNext();
 
@@ -548,26 +616,37 @@ function saveMachineSetup(payload) {
       var nextSectionRow = endFinder.getRow();
       var currentGap = nextSectionRow - startRow;
       
-      // B. Flatten Payload for writing
+      // Flatten Payload for writing: Single Header, Indented Options
       var linesToWrite = [];
       for (var p = 0; p < payload.baseTooling.length; p++) {
          var item = payload.baseTooling[p];
-         // 1. Parent ID (Row 1)
+         
+         // Row 1: Parent ID
          linesToWrite.push(item.id);
-         // 2. Child ID (Row 2, Indented)
-         if (item.option) {
-            linesToWrite.push("L " + item.option); // Tree Style
+         
+         // Row 2+: Options (Handle both Array and Single String for backward compat)
+         var opts = [];
+         if (Array.isArray(item.options)) {
+            opts = item.options;
+         } else if (item.option) {
+            opts = [item.option]; // Convert singular to array
+         }
+         
+         // Write Options with Indentation "L "
+         for (var o = 0; o < opts.length; o++) {
+            if (opts[o]) {
+               linesToWrite.push("L " + opts[o]); // Tree Style
+            }
          }
       }
       
       var requiredSlots = linesToWrite.length;
       if (requiredSlots === 0) requiredSlots = 1;
 
-      // C. Smart Insert / Delete Rows
+      // Smart Insert / Delete Rows
       if (requiredSlots > currentGap) {
          var rowsNeeded = requiredSlots - currentGap;
          sheet.insertRowsBefore(nextSectionRow, rowsNeeded);
-         // Apply formatting to new rows
          var newRowsRange = sheet.getRange(nextSectionRow, 1, rowsNeeded, sheet.getLastColumn());
          newRowsRange.setTextRotation(0).setVerticalAlignment("middle");
       } else if (requiredSlots < currentGap) {
@@ -575,17 +654,11 @@ function saveMachineSetup(payload) {
          if (rowsToDelete > 0) sheet.deleteRows(startRow + requiredSlots, rowsToDelete);
       }
       
-      // D. Write Data
+      // Write Data
       for (var k = 0; k < requiredSlots; k++) {
          var targetRow = startRow + k;
-         
-         if (k < linesToWrite.length) {
-           sheet.getRange(targetRow, 3).setValue(linesToWrite[k]);
-         } else {
-           sheet.getRange(targetRow, 3).clearContent();
-         }
-         
-         // Merge C:G
+         var val = (k < linesToWrite.length) ? linesToWrite[k] : "";
+         sheet.getRange(targetRow, 3).setValue(val);
          var mergeRange = sheet.getRange(targetRow, 3, 1, 5);
          try {
            if (!mergeRange.isPartOfMerge() || mergeRange.getMergedRanges().length > 1) { mergeRange.merge(); }
@@ -599,7 +672,7 @@ function saveMachineSetup(payload) {
 }
 
 // =======================================================
-// PHASE 4.2: EXTRACTION LOGIC ("The Brain")
+// EXTRACTION LOGIC
 // =======================================================
 
 function buildMasterDictionary() {
@@ -631,7 +704,7 @@ function buildMasterDictionary() {
     var packed = String(menuData[j][1]); 
     if (packed.indexOf("::") > -1) {
       var parts = packed.split("::");
-      addToDict(parts[0], parts[1]);
+      addToDict(parts[0].trim(), parts[1].trim());
     }
   }
 
@@ -659,7 +732,6 @@ function buildMasterDictionary() {
 
 /**
  * B. Extract Data for Production
- * UPDATED PHASE 5 (Item Number Logic Change)
  */
 function extractProductionData() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -669,7 +741,7 @@ function extractProductionData() {
   var masterDict = buildMasterDictionary();
   var lastRow = sheet.getLastRow();
   
-  // UPDATED PHASE 6: Dynamic Header Reading
+  // Dynamic Header Reading
   var vcmFinder = sheet.getRange("B:B").createTextFinder("VCM").matchEntireCell(true).findNext();
   if (!vcmFinder) throw new Error("Critical Error: 'VCM' anchor not found. Cannot extract configuration.");
   
@@ -722,8 +794,6 @@ function extractProductionData() {
       var globalQty = parseInt(row[8]); 
       if (isNaN(globalQty) || globalQty < 1) globalQty = 1;
       
-      // Removed hardcoded itemIndex logic
-
       function pushItem(category, id, descOverride, isPrimary) {
         if (!id || id === "") return;
         var cleanId = id.trim();
@@ -797,10 +867,9 @@ function extractProductionData() {
   return payload;
 }
 
-// =======================================================
-// PHASE 4.3: PRODUCTION INJECTION & STATUS UPDATE
-// =======================================================
-
+/**
+ * C. Inject Data to Production
+ */
 function injectProductionData(payload) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("ORDERING LIST");
@@ -831,7 +900,7 @@ function injectProductionData(payload) {
 }
 
 /**
- * D. The Smart Fill Helper - UPDATED PHASE 5 (New Columns G, H, I)
+ * D. The Smart Fill Helper
  */
 function insertRowsIntoSection(sheet, sectionHeader, items) {
   var lastRow = sheet.getLastRow();
@@ -907,7 +976,7 @@ function insertRowsIntoSection(sheet, sectionHeader, items) {
     sheet.insertRowsBefore(anchorRowIndex + 1, deficit);
   }
 
-  // 6. Write Data (Expanded for Phase 5)
+  // 6. Write Data
   var startWriteRow = writeCursorIndex + 1;
   var output = [];
   var numberingCounter = currentMaxNum;
@@ -934,10 +1003,8 @@ function insertRowsIntoSection(sheet, sectionHeader, items) {
   sheet.getRange(startWriteRow, 3, itemsNeeded, 7).setValues(output);
 
   // 7. Apply Data Validation (Checkbox & Dropdown)
-  // Apply Checkbox to Col G
   sheet.getRange(startWriteRow, 7, itemsNeeded, 1).insertCheckboxes();
 
-  // Apply Dropdown to Col I
   var typeRange = sheet.getRange(startWriteRow, 9, itemsNeeded, 1);
   var rule = SpreadsheetApp.newDataValidation()
     .requireValueInList(['CHARGE OUT', 'MRP'], true)
