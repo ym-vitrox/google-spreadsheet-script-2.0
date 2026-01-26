@@ -358,7 +358,7 @@
         }
     }
 
-    // --- Base Module Tooling Logic (UPDATED FOR PHASE 6 HYBRID + MULTI-SELECT + CATEGORIZED) ---
+    // --- Base Module Tooling Logic (UPDATED FOR PHASE 6 HYBRID + HIERARCHY) ---
     function loadBaseModuleTooling() {
        google.script.run.withSuccessHandler(function(tools) {
           baseToolingData = tools; // Cache
@@ -380,6 +380,7 @@
           var div = document.createElement("div");
           div.className = "row-item";
           div.dataset.toolId = tool.id;
+          div.dataset.toolDesc = tool.desc || ""; // Store Description for Payload
 
           // PARENT ID LABEL
           var label = document.createElement("span");
@@ -393,10 +394,15 @@
              // 1. Loop through Groups
              div.dataset.toolType = 'CATEGORIZED_MULTI';
              tool.groups.forEach(function(grp, index) {
+                 var groupContainer = document.createElement("div");
+                 groupContainer.className = "categorized-group-block";
+                 groupContainer.dataset.groupId = grp.id || ""; // Optional Ejector Needle ID
+                 groupContainer.dataset.groupName = grp.name;
+                 
                  var groupLabel = document.createElement("div");
                  groupLabel.className = "group-label";
-                 groupLabel.textContent = grp.name;
-                 div.appendChild(groupLabel);
+                 groupLabel.textContent = grp.name + (grp.id ? " (" + grp.id + ")" : ""); // Show ID if available
+                 groupContainer.appendChild(groupLabel);
                  
                  if (grp.type === 'single') {
                      // Single Select Dropdown
@@ -405,12 +411,12 @@
                      select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
                      select.innerHTML += buildCategorizedOptions(grp.options);
                      select.setAttribute("required", "true");
-                     div.appendChild(select);
+                     groupContainer.appendChild(select);
                  } else {
                      // Multi Select Logic (Reusing addMultiSelectRow)
                      var multiContainer = document.createElement("div");
                      multiContainer.className = "multi-select-container categorized-multi-select-container";
-                     div.appendChild(multiContainer);
+                     groupContainer.appendChild(multiContainer);
                      
                      // Cache options with unique key for this group
                      var cacheKey = tool.id + "_group_" + index;
@@ -424,8 +430,9 @@
                      addBtn.className = "link-btn";
                      addBtn.textContent = "+ Add Another " + grp.name;
                      addBtn.onclick = function() { addMultiSelectRow(cacheKey, multiContainer); };
-                     div.appendChild(addBtn);
+                     groupContainer.appendChild(addBtn);
                  }
+                 div.appendChild(groupContainer);
              });
              
           } else if (tool.type === 'COMPLEX') {
@@ -438,6 +445,7 @@
              div.appendChild(mandatoryBox);
              
              div.dataset.mandatoryId = tool.mandatoryItem.id;
+             div.dataset.mandatoryDesc = tool.mandatoryItem.desc || "";
              div.dataset.toolType = "COMPLEX";
 
              var select = document.createElement("select");
@@ -447,7 +455,7 @@
              div.appendChild(select);
              
           } else if (tool.type === 'MULTI_SELECT') {
-             // ... [Existing Multi Select Logic] ...
+             // ... [Existing Multi Logic] ...
              div.dataset.toolType = "MULTI_SELECT";
              multiSelectCache[tool.id] = tool.options;
              
@@ -466,6 +474,7 @@
              
           } else {
              // Standard Logic
+             div.dataset.toolType = "STANDARD";
              if (tool.options && tool.options.length > 0) {
                  var select = document.createElement("select");
                  select.className = "tool-opt-select";
@@ -495,11 +504,6 @@
         if (!options) return;
         
         var currentRows = container.querySelectorAll(".multi-select-row").length;
-        // Limit check optional but good practice
-        if (currentRows >= options.length && options.length > 0) { 
-            // alert("Max options reached."); 
-            // return; 
-        }
 
         var rowDiv = document.createElement("div");
         rowDiv.className = "row-item multi-select-row";
@@ -507,12 +511,11 @@
         rowDiv.style.alignItems = "center";
         
         var select = document.createElement("select");
-        // Unique class for validation scoping if needed, for now generic is fine
         select.className = "tool-opt-select multi-select-input-" + cacheKey; 
         select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
         select.innerHTML += buildCategorizedOptions(options);
         
-        // Validation Hook (Scope to this key)
+        // Validation Hook
         select.onchange = function() { validateMultiSelect(cacheKey); };
         
         rowDiv.appendChild(select);
@@ -550,6 +553,17 @@
             }
         });
     }
+    
+    // Helper to get text description from select element
+    function getSelectedText(selectEl) {
+       if (selectEl.selectedIndex === -1) return "";
+       // Remove "ID | " prefix if present in text
+       var text = selectEl.options[selectEl.selectedIndex].text;
+       if (text.includes(" | ")) {
+           return text.split(" | ")[1];
+       }
+       return text;
+    }
 
     // --- Vision PC Helpers ---
     function renderVisionPCOptions(options) {
@@ -583,6 +597,7 @@
         }
     }
 
+    // --- REFACTORED SAVE LOGIC FOR HIERARCHICAL TREE ---
     function saveMachineSetup() {
         var payload = {};
         
@@ -615,78 +630,145 @@
             }
         });
         
-        // 3. Base Module Tooling Logic (UPDATED FOR CATEGORIZED MULTI)
+        // 3. Base Module Tooling Logic (HIERARCHICAL PAYLOAD BUILDER)
         payload.baseTooling = [];
         var toolRows = document.querySelectorAll("#baseToolingList .row-item");
         var missingSelection = false;
 
         toolRows.forEach(function(row) {
            var toolId = row.dataset.toolId;
-           var toolType = row.dataset.toolType; 
+           var toolDesc = row.dataset.toolDesc;
+           var toolType = row.dataset.toolType;
            
+           // Construct Parent Object
+           var toolObj = {
+               id: toolId,
+               desc: toolDesc,
+               structure: [] // To hold Level 2 (Options/Groups) and Level 3 (Children)
+           };
+
            // --- CATEGORIZED MULTI SAVE LOGIC ---
            if (toolType === 'CATEGORIZED_MULTI') {
-               var allOptionsForThisTool = [];
-               
-               // 1. Collect Single Selects
-               var singleSelects = row.querySelectorAll(".categorized-single-select");
-               singleSelects.forEach(function(s) {
-                   if (s.value) allOptionsForThisTool.push(s.value);
-                   else missingSelection = true;
-               });
-               
-               // 2. Collect Multi Selects (Dynamic Rows)
-               // Find all containers inside this row
-               var containers = row.querySelectorAll(".categorized-multi-select-container");
-               containers.forEach(function(cont) {
-                   var selects = cont.querySelectorAll("select"); // All dropdowns in this container
-                   var hasAtLeastOne = false;
-                   selects.forEach(function(s) {
-                       if (s.value) {
-                           allOptionsForThisTool.push(s.value);
-                           hasAtLeastOne = true;
+               var groupBlocks = row.querySelectorAll(".categorized-group-block");
+               var hasSelectedInTool = false;
+
+               groupBlocks.forEach(function(block) {
+                   var groupName = block.dataset.groupName;
+                   var groupId = block.dataset.groupId; // E.g., 430001-A381 for needles
+                   
+                   var currentGroupStruct = null;
+                   var optionsFound = [];
+                   var seenIDs = new Set(); // SANITATION: Filter Duplicates
+                   
+                   // 1. Check Single Selects
+                   var singleSelects = block.querySelectorAll(".categorized-single-select");
+                   singleSelects.forEach(function(s) {
+                       if (s.value && !seenIDs.has(s.value)) {
+                           optionsFound.push({ id: s.value, desc: getSelectedText(s) });
+                           seenIDs.add(s.value);
+                       } else if (!s.value) {
+                           missingSelection = true;
                        }
                    });
-                   if (!hasAtLeastOne) missingSelection = true; // Optional group requirement: Must pick at least one
+                   
+                   // 2. Check Multi Selects
+                   var multiContainers = block.querySelectorAll(".categorized-multi-select-container");
+                   multiContainers.forEach(function(cont) {
+                       var selects = cont.querySelectorAll("select");
+                       var hasAtLeastOne = false;
+                       selects.forEach(function(s) {
+                           // SANITATION: Filter Empty
+                           if (s.value && !seenIDs.has(s.value)) {
+                               optionsFound.push({ id: s.value, desc: getSelectedText(s) });
+                               seenIDs.add(s.value);
+                               hasAtLeastOne = true;
+                           }
+                       });
+                       if (!hasAtLeastOne) missingSelection = true; 
+                   });
+                   
+                   if (optionsFound.length > 0) {
+                       hasSelectedInTool = true;
+                       if (groupId) {
+                           // This is a Level 2 Group Header (e.g. Needles)
+                           currentGroupStruct = {
+                               type: "group",
+                               id: groupId,
+                               desc: groupName, // "OPTIONAL EJECTOR NEEDLE"
+                               children: []
+                           };
+                           // Add options as Level 3 Children
+                           optionsFound.forEach(function(opt) {
+                               currentGroupStruct.children.push({ type: "item", id: opt.id, desc: opt.desc });
+                           });
+                           toolObj.structure.push(currentGroupStruct);
+                       } else {
+                           // This is just a list of Level 2 Options (e.g. Housing)
+                           optionsFound.forEach(function(opt) {
+                               toolObj.structure.push({ type: "option", id: opt.id, desc: opt.desc });
+                           });
+                       }
+                   }
                });
                
-               if (allOptionsForThisTool.length > 0) {
-                   payload.baseTooling.push({
-                       id: toolId,
-                       options: allOptionsForThisTool // Merged Array
+               if (hasSelectedInTool) payload.baseTooling.push(toolObj);
+
+           } else if (toolType === 'COMPLEX') {
+               // Mandatory Item (Level 2)
+               if (row.dataset.mandatoryId) {
+                   toolObj.structure.push({ 
+                       type: "option", 
+                       id: row.dataset.mandatoryId, 
+                       desc: row.dataset.mandatoryDesc 
                    });
                }
                
-           } else if (toolType === 'MULTI_SELECT') {
-               // ... [Existing Multi Logic] ...
-               var selects = row.querySelectorAll(".multi-select-input-" + toolId);
-               var selectedArr = [];
-               selects.forEach(function(s) {
-                  if (s.value) selectedArr.push(s.value);
-                  else missingSelection = true;
-               });
-               if (selectedArr.length > 0) {
-                   payload.baseTooling.push({ id: toolId, options: selectedArr });
+               // Selected Option (Level 2)
+               var select = row.querySelector("select.tool-opt-select");
+               if (select && select.value) {
+                   toolObj.structure.push({ 
+                       type: "option", 
+                       id: select.value, 
+                       desc: getSelectedText(select) 
+                   });
+               } else {
+                   if (select) missingSelection = true;
                }
                
-           } else {
-               // ... [Existing Standard Logic] ...
-               var select = row.querySelector("select.tool-opt-select");
-               var selectedVal = select ? select.value : null;
-               if (select && !selectedVal) missingSelection = true;
+               payload.baseTooling.push(toolObj);
                
-               if (toolId) {
-                   var optionsArr = [];
-                   if (toolType === 'COMPLEX' && row.dataset.mandatoryId) {
-                       optionsArr.push(row.dataset.mandatoryId);
-                   }
-                   if (selectedVal) optionsArr.push(selectedVal);
-                   
-                   if (optionsArr.length > 0) {
-                       payload.baseTooling.push({ id: toolId, options: optionsArr });
+           } else if (toolType === 'MULTI_SELECT') {
+               // ... [Multi Select Logic] ...
+               var selects = row.querySelectorAll(".multi-select-input-" + toolId);
+               var hasSelected = false;
+               var seenIDs = new Set();
+               
+               selects.forEach(function(s) {
+                  // SANITATION: Filter Empty & Duplicate
+                  if (s.value && !seenIDs.has(s.value)) {
+                      toolObj.structure.push({ type: "option", id: s.value, desc: getSelectedText(s) });
+                      seenIDs.add(s.value);
+                      hasSelected = true;
+                  } else if (!s.value) {
+                      missingSelection = true;
+                  }
+               });
+               
+               if (hasSelected) payload.baseTooling.push(toolObj);
+               
+           } else {
+               // Standard Logic
+               var select = row.querySelector("select.tool-opt-select");
+               if (select) {
+                   if (select.value) {
+                       toolObj.structure.push({ type: "option", id: select.value, desc: getSelectedText(select) });
+                       payload.baseTooling.push(toolObj);
                    } else {
-                       if (!select) payload.baseTooling.push({ id: toolId, options: [] });
+                       missingSelection = true;
                    }
+               } else {
+                   // Auto-Included (No Options) - Just push Parent
+                   payload.baseTooling.push(toolObj);
                }
            }
         });
