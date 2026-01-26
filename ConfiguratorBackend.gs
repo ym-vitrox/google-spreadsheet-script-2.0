@@ -188,12 +188,23 @@ function getBaseModuleToolingList() {
              var line = String(menuData[m][1]).trim();
              
              if (line.startsWith("---")) {
-                // New Group Detected
-                var groupName = line.replace(/---/g, "").trim();
-                var groupType = (groupName.indexOf("OPTIONAL") > -1) ? "multi" : "single";
+                // New Group Detected (e.g., --- OPTIONAL EJECTOR NEEDLE [430001-A381] ---)
+                var rawHeader = line.replace(/---/g, "").trim();
+                
+                // EXTRACT SUB-ID FROM HEADER IF PRESENT
+                var groupName = rawHeader;
+                var groupID = null;
+                var match = rawHeader.match(/\[(.*?)\]/);
+                if (match && match[1]) {
+                    groupID = match[1];
+                    groupName = rawHeader.replace(/\[.*?\]/, "").trim();
+                }
+
+                var groupType = (rawHeader.indexOf("OPTIONAL") > -1) ? "multi" : "single";
                 
                 currentGroup = {
                    name: groupName,
+                   id: groupID, // Pass this to Frontend for Sub-Grouping
                    type: groupType,
                    options: []
                 };
@@ -557,21 +568,20 @@ function saveConfiguration(payload) {
 }
 
 /**
- * 3.5 SAVE MACHINE SETUP (Phase 6)
- * Writes Vision PC, Configurable Base Module, AND Base Module Tooling.
- * UPDATED: Handles "One Header, Multiple Options" (Arrays) for Complex & Multi-Select Tooling.
+ * 3.5 SAVE MACHINE SETUP (Phase 6 - HYBRID RESTRUCTURE)
+ * Implements "Form" for Top Sections, "Tree" for Tooling.
  */
 function saveMachineSetup(payload) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
   if (!sheet) throw new Error("Sheet 'TRIAL-LAYOUT CONFIGURATION' not found.");
   
-  // 1. Save Vision PC (C2)
+  // 1. Save Vision PC (Merged Cell C2) - FORM STYLE
   if (payload.visionPC) {
     sheet.getRange(2, 3).setValue(payload.visionPC);
   }
   
-  // 2. Save Configurable Base Modules
+  // 2. Save Configurable Base Modules (Merged Cells C:G) - FORM STYLE
   if (payload.baseModules && Array.isArray(payload.baseModules)) {
     var startFinder = sheet.getRange("A:B").createTextFinder("Configurable Base Module").matchEntireCell(false).findNext();
     var endFinder = sheet.getRange("A:B").createTextFinder("Base Module Tooling").matchEntireCell(false).findNext();
@@ -581,8 +591,9 @@ function saveMachineSetup(payload) {
       var nextSectionRow = endFinder.getRow();
       var currentGap = nextSectionRow - startRow; 
       var itemsToSave = payload.baseModules;
-      var requiredSlots = Math.max(itemsToSave.length, 3); 
+      var requiredSlots = Math.max(itemsToSave.length, 3); // Minimum 3 lines
       
+      // Resize Logic
       if (requiredSlots > currentGap) {
          var rowsNeeded = requiredSlots - currentGap;
          sheet.insertRowsBefore(nextSectionRow, rowsNeeded);
@@ -593,11 +604,12 @@ function saveMachineSetup(payload) {
          if (rowsToDelete > 0) sheet.deleteRows(startRow + requiredSlots, rowsToDelete);
       }
       
+      // Write & Merge Logic
       for (var i = 0; i < requiredSlots; i++) {
          var targetRow = startRow + i;
          var val = (i < itemsToSave.length) ? itemsToSave[i] : ""; 
          sheet.getRange(targetRow, 3).setValue(val);
-         var mergeRange = sheet.getRange(targetRow, 3, 1, 5);
+         var mergeRange = sheet.getRange(targetRow, 3, 1, 5); // C to G
          try {
            if (!mergeRange.isPartOfMerge() || mergeRange.getMergedRanges().length > 1) { mergeRange.merge(); }
            mergeRange.setVerticalAlignment("middle");
@@ -606,44 +618,59 @@ function saveMachineSetup(payload) {
     }
   }
 
-  // 3. Save Base Module Tooling (UPDATED FOR SINGLE HEADER / MULTI-OPTION)
+  // 3. Save Base Module Tooling (HIERARCHICAL TREE - UNMERGED)
   if (payload.baseTooling && Array.isArray(payload.baseTooling)) {
     var startFinder = sheet.getRange("A:B").createTextFinder("Base Module Tooling").matchEntireCell(false).findNext();
     var endFinder = sheet.getRange("A:B").createTextFinder("Comment").matchEntireCell(false).findNext();
+    
+    // SAFETY CHECK: CRITICAL
+    if (!endFinder) {
+       throw new Error("Critical Error: 'Comment' anchor not found in Column A/B. Aborting save to prevent overwriting.");
+    }
 
     if (startFinder && endFinder) {
       var startRow = startFinder.getRow();
       var nextSectionRow = endFinder.getRow();
       var currentGap = nextSectionRow - startRow;
       
-      // Flatten Payload for writing: Single Header, Indented Options
-      var linesToWrite = [];
+      // A. Build Flattened Write Queue from Hierarchical Payload
+      var writeQueue = [];
+      
       for (var p = 0; p < payload.baseTooling.length; p++) {
-         var item = payload.baseTooling[p];
+         var tool = payload.baseTooling[p];
          
-         // Row 1: Parent ID
-         linesToWrite.push(item.id);
+         // Level 1: Tool Parent
+         writeQueue.push({ 
+             level: 1, 
+             id: tool.id, 
+             desc: tool.desc 
+         });
          
-         // Row 2+: Options (Handle both Array and Single String for backward compat)
-         var opts = [];
-         if (Array.isArray(item.options)) {
-            opts = item.options;
-         } else if (item.option) {
-            opts = [item.option]; // Convert singular to array
-         }
-         
-         // Write Options with Indentation "L "
-         for (var o = 0; o < opts.length; o++) {
-            if (opts[o]) {
-               linesToWrite.push("L " + opts[o]); // Tree Style
-            }
+         // Level 2 & 3
+         if (tool.structure && tool.structure.length > 0) {
+             for (var s = 0; s < tool.structure.length; s++) {
+                 var item = tool.structure[s];
+                 if (item.type === 'option') {
+                     // Level 2 Option
+                     writeQueue.push({ level: 2, id: item.id, desc: item.desc });
+                 } else if (item.type === 'group') {
+                     // Level 2 Group Header
+                     writeQueue.push({ level: 2, id: item.id || item.desc, desc: item.desc, isGroupHeader: true });
+                     // Level 3 Children
+                     if (item.children && item.children.length > 0) {
+                         for (var c = 0; c < item.children.length; c++) {
+                             var child = item.children[c];
+                             writeQueue.push({ level: 3, id: child.id, desc: child.desc });
+                         }
+                     }
+                 }
+             }
          }
       }
       
-      var requiredSlots = linesToWrite.length;
-      if (requiredSlots === 0) requiredSlots = 1;
+      var requiredSlots = Math.max(writeQueue.length, 1);
 
-      // Smart Insert / Delete Rows
+      // B. Smart Resize (Insert/Delete Rows)
       if (requiredSlots > currentGap) {
          var rowsNeeded = requiredSlots - currentGap;
          sheet.insertRowsBefore(nextSectionRow, rowsNeeded);
@@ -654,16 +681,37 @@ function saveMachineSetup(payload) {
          if (rowsToDelete > 0) sheet.deleteRows(startRow + requiredSlots, rowsToDelete);
       }
       
-      // Write Data
-      for (var k = 0; k < requiredSlots; k++) {
-         var targetRow = startRow + k;
-         var val = (k < linesToWrite.length) ? linesToWrite[k] : "";
-         sheet.getRange(targetRow, 3).setValue(val);
-         var mergeRange = sheet.getRange(targetRow, 3, 1, 5);
-         try {
-           if (!mergeRange.isPartOfMerge() || mergeRange.getMergedRanges().length > 1) { mergeRange.merge(); }
-           mergeRange.setVerticalAlignment("middle");
-         } catch(e) {}
+      // C. BREAK APART MERGES (The Key Step)
+      // Unmerge C:G for the entire tooling block
+      var toolingBlock = sheet.getRange(startRow, 3, requiredSlots, 5); // C to G
+      toolingBlock.breakApart(); 
+      toolingBlock.clearContent(); // Clear old data
+      toolingBlock.setBorder(true, true, true, true, true, true, "lightgray", SpreadsheetApp.BorderStyle.SOLID);
+      
+      // D. Write Hierarchical Data
+      for (var k = 0; k < writeQueue.length; k++) {
+         var rowIdx = startRow + k;
+         var data = writeQueue[k];
+         
+         // Column Mapping:
+         // Level 1 -> Col C (3)
+         // Level 2 -> Col D (4)
+         // Level 3 -> Col E (5)
+         // Desc -> Col F (6)
+         
+         var targetCol = 2 + data.level; // 1->3, 2->4, 3->5
+         var idCell = sheet.getRange(rowIdx, targetCol);
+         var descCell = sheet.getRange(rowIdx, 6); // Col F
+         
+         idCell.setValue(data.id);
+         descCell.setValue(data.desc);
+         
+         // Styling
+         if (data.level === 1) {
+             idCell.setFontWeight("bold");
+         } else if (data.isGroupHeader) {
+             idCell.setFontWeight("bold").setFontStyle("italic");
+         }
       }
     }
   }
@@ -732,6 +780,7 @@ function buildMasterDictionary() {
 
 /**
  * B. Extract Data for Production
+ * (Synced to B-Slot Configurations only, ignoring Machine Setup as requested)
  */
 function extractProductionData() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -776,7 +825,7 @@ function extractProductionData() {
     var syncStatus = String(row[9]).trim(); // Col J
     var moduleID = String(row[10]).trim();  // Col K
     
-    // Dynamic start check
+    // Dynamic start check for B10+
     if (!startScanning && turretName.startsWith("B") && !isNaN(parseInt(turretName.substring(1)))) {
        startScanning = true;
     }
@@ -811,9 +860,9 @@ function extractProductionData() {
       pushItem("ELECTRICAL", String(row[11]), null, true);
       pushItem("VISION", String(row[12]), null, true);
 
-      // Tooling
+      // Tooling - Standard extraction from Cols M & N
       pushItem("TOOLING", String(row[13]), null, true); 
-      pushItem("TOOLING", String(row[14]), null, false); // Secondary
+      pushItem("TOOLING", String(row[14]), null, false); 
 
       pushItem("JIG", String(row[15]), null, true);
 
