@@ -1,7 +1,9 @@
 /**
  * ConfiguratorBackend.gs
  * Server-side logic for the Module Configurator UI.
- * UPDATED: Phase 6 (Machine Setup - Hybrid Logic / Single Header + Multi-Select + Categorized Multi)
+ * UPDATED: Phase 6 (Machine Setup - 2-Level Flattened Hierarchy & Sync Update)
+ * FIX: "Collapse & Rebuild" strategy + Strict Sanitation to eliminate duplication bugs.
+ * FIX: Robust Anchor Detection (Regex) + Safety Check for Anchor Order.
  */
 
 // --- CONSTANTS ---
@@ -570,6 +572,10 @@ function saveConfiguration(payload) {
 /**
  * 3.5 SAVE MACHINE SETUP (Phase 6 - HYBRID RESTRUCTURE)
  * Implements "Form" for Top Sections, "Tree" for Tooling.
+ * UPDATED: 2-Level Flattened Hierarchy (Col C & D only, Desc in E)
+ * FIX: "Collapse & Rebuild" Strategy to prevent duplication bugs.
+ * FIX: Sanitation to prevent empty row gaps.
+ * FIX: Robust Anchor Detection (Regex: Comments?:?) and Order Safety Check.
  */
 function saveMachineSetup(payload) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -593,7 +599,7 @@ function saveMachineSetup(payload) {
       var itemsToSave = payload.baseModules;
       var requiredSlots = Math.max(itemsToSave.length, 3); // Minimum 3 lines
       
-      // Resize Logic
+      // Smart Resize (Safe here as usually small fixed list)
       if (requiredSlots > currentGap) {
          var rowsNeeded = requiredSlots - currentGap;
          sheet.insertRowsBefore(nextSectionRow, rowsNeeded);
@@ -618,49 +624,79 @@ function saveMachineSetup(payload) {
     }
   }
 
-  // 3. Save Base Module Tooling (HIERARCHICAL TREE - UNMERGED)
+  // 3. Save Base Module Tooling (FLATTENED TREE - UNMERGED)
+  // CRITICAL FIX: COLLAPSE & REBUILD STRATEGY WITH ROBUST ANCHORING
   if (payload.baseTooling && Array.isArray(payload.baseTooling)) {
-    var startFinder = sheet.getRange("A:B").createTextFinder("Base Module Tooling").matchEntireCell(false).findNext();
-    var endFinder = sheet.getRange("A:B").createTextFinder("Comment").matchEntireCell(false).findNext();
     
-    // SAFETY CHECK: CRITICAL
+    // --- SANITATION STEP: FILTER OUT EMPTY ROWS ---
+    var sanitizedTooling = payload.baseTooling.filter(function(item) {
+        var hasId = item.id && item.id.trim() !== "";
+        var hasDesc = item.desc && item.desc.trim() !== "";
+        var hasChildren = item.structure && item.structure.length > 0;
+        return hasId || hasDesc || hasChildren;
+    });
+
+    var startFinder = sheet.getRange("A:B").createTextFinder("Base Module Tooling").matchEntireCell(false).findNext();
+    
+    // ROBUST ANCHORING: FIND ALL Variations (Comment, Comments, Comment:)
+    // Use Regex: (?i)^Comments?:?$ -> Case insensitive, 'Comment' or 'Comments', optional ':'
+    var commentFinders = sheet.getRange("A:B").createTextFinder("(?i)^Comments?:?$").useRegularExpression(true).matchEntireCell(true).findAll();
+    var endFinder = null;
+    
+    if (commentFinders && commentFinders.length > 0) {
+        // Pick the last one to be safe against matches in descriptions (though matchEntireCell protects somewhat)
+        endFinder = commentFinders[commentFinders.length - 1]; 
+    }
+    
+    if (!startFinder) {
+       // If start anchor missing, we cannot proceed safely
+       return { status: "error", message: "Anchor 'Base Module Tooling' not found." };
+    }
+
     if (!endFinder) {
-       throw new Error("Critical Error: 'Comment' anchor not found in Column A/B. Aborting save to prevent overwriting.");
+       throw new Error("Critical Error: Footer anchor 'Comment' (or Comment:) not found in Column A/B. Aborting save.");
     }
 
     if (startFinder && endFinder) {
       var startRow = startFinder.getRow();
-      var nextSectionRow = endFinder.getRow();
-      var currentGap = nextSectionRow - startRow;
+      var endRow = endFinder.getRow();
+
+      // SAFETY CHECK: Ensure End is actually below Start
+      if (endRow <= startRow) {
+         throw new Error("Layout Error: Found 'Comment' anchor at Row " + endRow + " which is above/equal to 'Base Module Tooling' at Row " + startRow + ". Please check your staging sheet anchors.");
+      }
       
-      // A. Build Flattened Write Queue from Hierarchical Payload
+      // A. Build Flattened Write Queue (2-Level Logic)
       var writeQueue = [];
       
-      for (var p = 0; p < payload.baseTooling.length; p++) {
-         var tool = payload.baseTooling[p];
+      for (var p = 0; p < sanitizedTooling.length; p++) {
+         var tool = sanitizedTooling[p];
          
-         // Level 1: Tool Parent
+         // Level 1: Tool Parent -> Col C
          writeQueue.push({ 
              level: 1, 
              id: tool.id, 
              desc: tool.desc 
          });
          
-         // Level 2 & 3
+         // Level 2: Flattened Children/Options
          if (tool.structure && tool.structure.length > 0) {
              for (var s = 0; s < tool.structure.length; s++) {
                  var item = tool.structure[s];
+                 
+                 // Strict check for option emptiness too
+                 if (!item.id && !item.desc) continue;
+
                  if (item.type === 'option') {
-                     // Level 2 Option
+                     // Standard Option -> Level 2
                      writeQueue.push({ level: 2, id: item.id, desc: item.desc });
                  } else if (item.type === 'group') {
-                     // Level 2 Group Header
-                     writeQueue.push({ level: 2, id: item.id || item.desc, desc: item.desc, isGroupHeader: true });
-                     // Level 3 Children
+                     // Group Header -> DISCARD (Option A)
+                     // Process Children -> PROMOTE to Level 2 (Siblings)
                      if (item.children && item.children.length > 0) {
                          for (var c = 0; c < item.children.length; c++) {
                              var child = item.children[c];
-                             writeQueue.push({ level: 3, id: child.id, desc: child.desc });
+                             writeQueue.push({ level: 2, id: child.id, desc: child.desc });
                          }
                      }
                  }
@@ -670,49 +706,59 @@ function saveMachineSetup(payload) {
       
       var requiredSlots = Math.max(writeQueue.length, 1);
 
-      // B. Smart Resize (Insert/Delete Rows)
-      if (requiredSlots > currentGap) {
-         var rowsNeeded = requiredSlots - currentGap;
-         sheet.insertRowsBefore(nextSectionRow, rowsNeeded);
-         var newRowsRange = sheet.getRange(nextSectionRow, 1, rowsNeeded, sheet.getLastColumn());
-         newRowsRange.setTextRotation(0).setVerticalAlignment("middle");
-      } else if (requiredSlots < currentGap) {
-         var rowsToDelete = currentGap - requiredSlots;
-         if (rowsToDelete > 0) sheet.deleteRows(startRow + requiredSlots, rowsToDelete);
+      // B. NUCLEAR OPTION: COLLAPSE THEN EXPAND
+      // 1. Calculate how many rows exist currently between headers
+      var currentGap = endRow - startRow - 1; // Rows strictly between headers
+      
+      // 2. Delete ALL existing rows in the gap (if any)
+      if (currentGap > 0) {
+         sheet.deleteRows(startRow + 1, currentGap);
       }
       
-      // C. BREAK APART MERGES (The Key Step)
-      // Unmerge C:G for the entire tooling block
-      var toolingBlock = sheet.getRange(startRow, 3, requiredSlots, 5); // C to G
-      toolingBlock.breakApart(); 
-      toolingBlock.clearContent(); // Clear old data
-      toolingBlock.setBorder(true, true, true, true, true, true, "lightgray", SpreadsheetApp.BorderStyle.SOLID);
+      // 3. Insert EXACTLY needed rows (fresh canvas)
+      if (requiredSlots > 0) {
+         sheet.insertRowsAfter(startRow, requiredSlots);
+         // Reset formatting for new rows just in case
+         var newRange = sheet.getRange(startRow + 1, 1, requiredSlots, sheet.getLastColumn());
+         newRange.setTextRotation(0).setVerticalAlignment("middle").setFontWeight("normal").setFontStyle("normal");
+      }
       
-      // D. Write Hierarchical Data
-      for (var k = 0; k < writeQueue.length; k++) {
-         var rowIdx = startRow + k;
-         var data = writeQueue[k];
-         
-         // Column Mapping:
-         // Level 1 -> Col C (3)
-         // Level 2 -> Col D (4)
-         // Level 3 -> Col E (5)
-         // Desc -> Col F (6)
-         
-         var targetCol = 2 + data.level; // 1->3, 2->4, 3->5
-         var idCell = sheet.getRange(rowIdx, targetCol);
-         var descCell = sheet.getRange(rowIdx, 6); // Col F
-         
-         idCell.setValue(data.id);
-         descCell.setValue(data.desc);
-         
-         // Styling
-         if (data.level === 1) {
-             idCell.setFontWeight("bold");
-         } else if (data.isGroupHeader) {
-             idCell.setFontWeight("bold").setFontStyle("italic");
+      // C. WRITE DATA
+      // Col C = Level 1 ID
+      // Col D = Level 2 ID
+      // Col E = Description (Moved from F)
+      // Col F = Empty
+      
+      var outputRange = sheet.getRange(startRow + 1, 3, requiredSlots, 3); // C, D, E
+      var values = [];
+      var fontWeights = [];
+
+      for (var k = 0; k < requiredSlots; k++) {
+         if (k < writeQueue.length) {
+            var data = writeQueue[k];
+            var colC = (data.level === 1) ? data.id : "";
+            var colD = (data.level === 2) ? data.id : "";
+            var colE = data.desc || "";
+            
+            values.push([colC, colD, colE]);
+            // All Bold as requested
+            fontWeights.push(["bold", "bold", "bold"]);
+         } else {
+            // Should not happen with nuclear logic, but safe fallback
+            values.push(["", "", ""]);
+            fontWeights.push(["normal", "normal", "normal"]);
          }
       }
+      
+      outputRange.setValues(values);
+      outputRange.setFontWeights(fontWeights);
+      
+      // Cleanup Col F just to be safe (explicit clear)
+      sheet.getRange(startRow + 1, 6, requiredSlots, 1).clearContent();
+      
+      // Borders
+      var block = sheet.getRange(startRow + 1, 3, requiredSlots, 4); // C to F
+      block.setBorder(true, true, true, true, true, true, "lightgray", SpreadsheetApp.BorderStyle.SOLID);
     }
   }
   
@@ -780,7 +826,7 @@ function buildMasterDictionary() {
 
 /**
  * B. Extract Data for Production
- * (Synced to B-Slot Configurations only, ignoring Machine Setup as requested)
+ * UPDATED: Includes Machine Setup (Top Section) Extraction
  */
 function extractProductionData() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -789,7 +835,61 @@ function extractProductionData() {
 
   var masterDict = buildMasterDictionary();
   var lastRow = sheet.getLastRow();
+
+  // Initialize Payload
+  var payload = {
+    MODULE: [],
+    ELECTRICAL: [],
+    VISION: [],
+    TOOLING: [],
+    JIG: [], 
+    SPARES: [],
+    VCM: [],
+    OTHERS: [], 
+    rowsToMarkSynced: [] 
+  };
+
+  // --- SECTION 1: MACHINE SETUP EXTRACTION (Cols C-E) ---
+  // Scan between "Base Module Tooling" and "Comment"
+  try {
+     var toolStart = sheet.getRange("A:B").createTextFinder("Base Module Tooling").matchEntireCell(false).findNext();
+     // FIX: Robust Regex Search for Comment Anchor
+     var toolEndFinder = sheet.getRange("A:B").createTextFinder("(?i)^Comments?:?$").useRegularExpression(true).matchEntireCell(true).findAll();
+     
+     if (toolStart && toolEndFinder && toolEndFinder.length > 0) {
+        var startR = toolStart.getRow(); // The header row "Base Module Tooling"
+        var endR = toolEndFinder[toolEndFinder.length - 1].getRow(); // Last "Comment:"
+        
+        // Data is between startR and endR
+        if (endR > startR + 1) {
+           var setupRange = sheet.getRange(startR + 1, 3, endR - startR - 1, 3).getValues(); // C, D, E
+           
+           for (var m = 0; m < setupRange.length; m++) {
+              var rowData = setupRange[m];
+              var idC = String(rowData[0]).trim(); // Parent (Level 1)
+              var idD = String(rowData[1]).trim(); // Child (Level 2)
+              var descE = String(rowData[2]).trim(); // Description in E
+              
+              var validID = "";
+              if (idC) validID = idC;
+              else if (idD) validID = idD;
+              
+              if (validID) {
+                 payload.TOOLING.push({
+                    requiresNumbering: true,
+                    id: validID,
+                    desc: descE || masterDict[validID] || "Manual Entry",
+                    qty: 1
+                 });
+              }
+           }
+        }
+     }
+  } catch(e) {
+     console.warn("Machine Setup Extraction Failed: " + e.message);
+  }
   
+  // --- SECTION 2: MODULE CONFIGURATION EXTRACTION (B-Slots) ---
   // Dynamic Header Reading
   var vcmFinder = sheet.getRange("B:B").createTextFinder("VCM").matchEntireCell(true).findNext();
   if (!vcmFinder) throw new Error("Critical Error: 'VCM' anchor not found. Cannot extract configuration.");
@@ -804,18 +904,6 @@ function extractProductionData() {
   // Data Range: From VCM Row + 2 downwards
   var startDataRow = vcmRowIndex + 2;
   var rawData = sheet.getRange(startDataRow, 1, lastRow - startDataRow + 1, 18).getValues();
-
-  var payload = {
-    MODULE: [],
-    ELECTRICAL: [],
-    VISION: [],
-    TOOLING: [],
-    JIG: [], 
-    SPARES: [],
-    VCM: [],
-    OTHERS: [], 
-    rowsToMarkSynced: [] 
-  };
 
   var startScanning = false;
   
