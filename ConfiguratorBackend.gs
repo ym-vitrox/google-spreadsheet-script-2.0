@@ -149,7 +149,11 @@ function getBaseModuleToolingList() {
   var menuData = toolingRange; // Reuse the U:V values
 
   for (var j = 0; j < toolingRange.length; j++) {
-    var parentID = String(toolingRange[j][0]).trim();
+    var rawParentField = String(toolingRange[j][0]).trim();
+    var partsParent = rawParentField.split("|");
+    var parentID = partsParent[0].trim();
+    var parentDescFromColU = (partsParent.length > 1) ? partsParent[1].trim() : "";
+
     var rawDescField = String(toolingRange[j][1]).trim(); // Col V
 
     // Filter Logic
@@ -167,12 +171,18 @@ function getBaseModuleToolingList() {
     }
     seenParents.add(parentID);
 
-    // 4. Parse Description from Col V
-    var finalDesc = rawDescField;
-    if (rawDescField.indexOf("::") > -1) {
-      var parts = rawDescField.split("::");
-      if (parts.length > 1) {
-        finalDesc = parts[1].trim(); // Take the description part
+    // 4. Determine Description
+    // Priority: Description from Col U (Master) > Description derived from Child (Legacy)
+    var finalDesc = parentDescFromColU;
+
+    if (!finalDesc || finalDesc === "") {
+      // Fallback: Using old logic (taking description from child row if format is "ID::Desc")
+      finalDesc = rawDescField;
+      if (rawDescField.indexOf("::") > -1) {
+        var parts = rawDescField.split("::");
+        if (parts.length > 1) {
+          finalDesc = parts[1].trim();
+        }
       }
     }
 
@@ -186,7 +196,9 @@ function getBaseModuleToolingList() {
 
       // Manually scan the menuData for this parentID
       for (var m = 0; m < menuData.length; m++) {
-        if (String(menuData[m][0]) === parentID) {
+        var rowParentRaw = String(menuData[m][0]);
+        var rowID = rowParentRaw.split("|")[0].trim();
+        if (rowID === parentID) {
           var line = String(menuData[m][1]).trim();
 
           if (line.startsWith("---")) {
@@ -421,10 +433,11 @@ function fetchOptionsForTool(menuData, parentID) {
   var currentCategory = "Standard Options";
 
   for (var i = 0; i < menuData.length; i++) {
-    var rowParent = String(menuData[i][0]);
+    var rawParent = String(menuData[i][0]);
+    var parentIDCheck = rawParent.split("|")[0].trim();
     var rowChild = String(menuData[i][1]);
 
-    if (rowParent === parentID) {
+    if (parentIDCheck === parentID) {
       foundParent = true;
       if (rowChild) {
         if (rowChild.indexOf("---") > -1) {
@@ -440,7 +453,7 @@ function fetchOptionsForTool(menuData, parentID) {
         }
       }
     } else if (foundParent) {
-      if (rowParent !== "") break;
+      if (rawParent !== "") break;
     }
   }
   return options;
@@ -648,42 +661,49 @@ function saveMachineSetup(payloadRaw) {
       if (anchorMap.configModule !== -1 && anchorMap.baseTooling !== -1) {
         var startRow = anchorMap.configModule;
         var nextSectionRow = anchorMap.baseTooling;
-        var currentGap = nextSectionRow - startRow - 1; // Gap between headers
+        var currentGap = nextSectionRow - startRow; // Gap includes Header Row now
         var itemsToSave = payload.baseModules;
         var requiredSlots = Math.max(itemsToSave.length, 3);
 
         log.push("BaseMod Update: Gap=" + currentGap + ", Need=" + requiredSlots);
 
-        // A. RESET SECTION: Delete existing rows in the gap
-        if (currentGap > 0) {
-          sheet.deleteRows(startRow + 1, currentGap);
-          // Update Map immediately because we shifted rows up
-          anchorMap.baseTooling -= currentGap;
-          anchorMap.comment -= currentGap;
-        }
-
-        // B. PREPARE SLOTS: Insert exactly what is needed
-        if (requiredSlots > 0) {
-          sheet.insertRowsAfter(startRow, requiredSlots);
+        // --- SMART OVERWRITE STRATEGY (INCL HEADER ROW) ---
+        // 1. Adjust Row Count (Insert or Delete at tail only)
+        if (requiredSlots > currentGap) {
+          var rowsToAdd = requiredSlots - currentGap;
+          // Insert after the last existing slot (startRow + currentGap - 1)
+          sheet.insertRowsAfter(startRow + currentGap - 1, rowsToAdd);
           // Update Map immediately (shifted down)
-          anchorMap.baseTooling += requiredSlots;
-          anchorMap.comment += requiredSlots;
+          anchorMap.baseTooling += rowsToAdd;
+          anchorMap.comment += rowsToAdd;
+        } else if (currentGap > requiredSlots) {
+          var rowsToDelete = currentGap - requiredSlots;
+          // Delete starting from the first extra row (startRow + requiredSlots)
+          // Note: In 1-based indexing, if we filled 0..req-1 (rows start..start+req-1), next is start+req.
+          sheet.deleteRows(startRow + requiredSlots, rowsToDelete);
+          // Update Map immediately (shifted up)
+          anchorMap.baseTooling -= rowsToDelete;
+          anchorMap.comment -= rowsToDelete;
         }
 
-        // C. WRITE DATE (Rows are now guaranteed empty and correct count)
+        // 2. Overwrite Data
         for (var i = 0; i < requiredSlots; i++) {
-          var targetRow = startRow + 1 + i; // Write AFTER header
+          var targetRow = startRow + i; // Write STARTING AT header row
           var val = (i < itemsToSave.length) ? itemsToSave[i] : "";
 
-          sheet.getRange(targetRow, 3).setValue(val);
+          var cell = sheet.getRange(targetRow, 3);
+          cell.setValue(val);
 
-          // Formatting (optional merge)
+          // Formatting (Safe Merge)
           var mergeRange = sheet.getRange(targetRow, 3, 1, 5);
           try {
             // Only merge if not already merged or if we just created it
             mergeRange.merge();
             mergeRange.setVerticalAlignment("middle");
           } catch (e) { }
+
+          // Borders (All Borders)
+          sheet.getRange(targetRow, 3, 1, 5).setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
         }
       }
     }
@@ -722,26 +742,26 @@ function saveMachineSetup(payloadRaw) {
       }
 
       var requiredSlots = Math.max(writeQueue.length, 1);
-      var currentGap = endRow - startRow - 1;
+      var currentGap = endRow - startRow; // Gap includes Header Row
 
       log.push("Tooling Update: Gap=" + currentGap + ", Need=" + requiredSlots);
 
-      // A. RESET SECTION: Delete existing rows in the gap
-      if (currentGap > 0) {
-        SpreadsheetApp.flush();
-        sheet.deleteRows(startRow + 1, currentGap);
-      }
-
-      // B. PREPARE SLOTS: Insert exactly what is needed
-      if (requiredSlots > 0) {
-        SpreadsheetApp.flush();
-        sheet.insertRowsAfter(startRow, requiredSlots);
-        var newRange = sheet.getRange(startRow + 1, 1, requiredSlots, sheet.getLastColumn());
+      // --- SMART OVERWRITE STRATEGY (INCL HEADER ROW) ---
+      // 1. Adjust Row Count
+      if (requiredSlots > currentGap) {
+        var rowsToAdd = requiredSlots - currentGap;
+        // Insert after the last existing slot
+        sheet.insertRowsAfter(startRow + currentGap - 1, rowsToAdd);
+        var newRange = sheet.getRange(startRow + currentGap, 1, rowsToAdd, sheet.getLastColumn());
         newRange.setTextRotation(0).setVerticalAlignment("middle").setFontWeight("normal").setFontStyle("normal");
+      } else if (currentGap > requiredSlots) {
+        var rowsToDelete = currentGap - requiredSlots;
+        // Delete extra rows
+        sheet.deleteRows(startRow + requiredSlots, rowsToDelete);
       }
 
-      // Write Data
-      var outputRange = sheet.getRange(startRow + 1, 3, requiredSlots, 3); // C, D, E Only
+      // 2. Overwrite Data
+      var outputRange = sheet.getRange(startRow, 3, requiredSlots, 3); // Start at Header Row (C,D,E)
       var values = [];
       var fontWeights = [];
       for (var k = 0; k < requiredSlots; k++) {
@@ -758,11 +778,11 @@ function saveMachineSetup(payloadRaw) {
       outputRange.setValues(values);
       outputRange.setFontWeights(fontWeights);
 
-      // Cleanup Col F just to be safe (explicit clear of old descriptions if they existed there)
-      sheet.getRange(startRow + 1, 6, requiredSlots, 1).clearContent();
+      // Cleanup Col F just to be safe
+      sheet.getRange(startRow, 6, requiredSlots, 1).clearContent();
 
       // Borders
-      sheet.getRange(startRow + 1, 3, requiredSlots, 4).setBorder(true, true, true, true, true, true, "lightgray", SpreadsheetApp.BorderStyle.SOLID);
+      sheet.getRange(startRow, 3, requiredSlots, 4).setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
     }
 
     log.push("Success");
