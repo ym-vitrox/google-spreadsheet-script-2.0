@@ -1,82 +1,310 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <base target="_top">
   <style>
-    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 10px; background-color: #f4f4f4; color: #333; }
-    
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 10px;
+      background-color: #f4f4f4;
+      color: #333;
+    }
+
     /* Navigation Tabs */
-    .nav-bar { display: flex; border-bottom: 2px solid #ddd; margin-bottom: 15px; }
-    .nav-btn { flex: 1; padding: 10px; text-align: center; cursor: pointer; background: #ecf0f1; border: none; font-weight: 600; color: #7f8c8d; }
-    .nav-btn.active { background: white; border-bottom: 3px solid #3498db; color: #2c3e50; }
-    
-    h3 { margin-top: 0; margin-bottom: 15px; color: #2c3e50; font-size: 16px; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
-    
+    .nav-bar {
+      display: flex;
+      border-bottom: 2px solid #ddd;
+      margin-bottom: 15px;
+    }
+
+    .nav-btn {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+      background: #ecf0f1;
+      border: none;
+      font-weight: 600;
+      color: #7f8c8d;
+    }
+
+    .nav-btn.active {
+      background: white;
+      border-bottom: 3px solid #3498db;
+      color: #2c3e50;
+    }
+
+    h3 {
+      margin-top: 0;
+      margin-bottom: 15px;
+      color: #2c3e50;
+      font-size: 16px;
+      border-bottom: 2px solid #ddd;
+      padding-bottom: 5px;
+    }
+
     /* Cards */
-    .card { background: white; border-radius: 6px; padding: 12px; margin-bottom: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border-left: 4px solid #3498db; }
-    .card.vision { border-left-color: #9b59b6; }
-    .card.tooling { border-left-color: #e67e22; }
-    .card.spare { border-left-color: #27ae60; } 
-    .card.layout { border-left-color: #e74c3c; } /* Red for Layout/Flags */
-    .card.qty { border-left-color: #f1c40f; } /* Yellow for Qty */
-    .card.setup { border-left-color: #8e44ad; } /* Purple for Machine Setup */
-    
-    .label { font-weight: bold; font-size: 11px; color: #7f8c8d; text-transform: uppercase; display: block; margin-bottom: 6px; }
-    
+    .card {
+      background: white;
+      border-radius: 6px;
+      padding: 12px;
+      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      border-left: 4px solid #3498db;
+    }
+
+    .card.vision {
+      border-left-color: #9b59b6;
+    }
+
+    .card.tooling {
+      border-left-color: #e67e22;
+    }
+
+    .card.spare {
+      border-left-color: #27ae60;
+    }
+
+    .card.layout {
+      border-left-color: #e74c3c;
+    }
+
+    /* Red for Layout/Flags */
+    .card.qty {
+      border-left-color: #f1c40f;
+    }
+
+    /* Yellow for Qty */
+    .card.setup {
+      border-left-color: #8e44ad;
+    }
+
+    /* Purple for Machine Setup */
+
+    .label {
+      font-weight: bold;
+      font-size: 11px;
+      color: #7f8c8d;
+      text-transform: uppercase;
+      display: block;
+      margin-bottom: 6px;
+    }
+
     /* Inputs */
-    select, input[type="text"] { width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; background: white; font-size: 13px; box-sizing: border-box; }
-    select:focus, input:focus { border-color: #3498db; outline: none; }
-    input[type="text"].hidden { display: none; }
-    input[type="text"] { margin-top: 5px; }
-    
+    select,
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #bdc3c7;
+      border-radius: 4px;
+      background: white;
+      font-size: 13px;
+      box-sizing: border-box;
+    }
+
+    select:focus,
+    input:focus {
+      border-color: #3498db;
+      outline: none;
+    }
+
+    input[type="text"].hidden {
+      display: none;
+    }
+
+    input[type="text"] {
+      margin-top: 5px;
+    }
+
     /* Dynamic List Styling */
-    .row-item { margin-bottom: 8px; }
-    .small-btn { width: auto; font-size: 12px; padding: 6px 12px; background-color: #8e44ad; }
-    .small-btn:hover { background-color: #7d3c98; }
-    .link-btn { color: #3498db; font-size: 12px; text-decoration: underline; cursor: pointer; margin-left: 4px; }
-    
+    .row-item {
+      margin-bottom: 8px;
+    }
+
+    .small-btn {
+      width: auto;
+      font-size: 12px;
+      padding: 6px 12px;
+      background-color: #8e44ad;
+    }
+
+    .small-btn:hover {
+      background-color: #7d3c98;
+    }
+
+    .link-btn {
+      color: #3498db;
+      font-size: 12px;
+      text-decoration: underline;
+      cursor: pointer;
+      margin-left: 4px;
+    }
+
     /* Remove Button */
-    .remove-btn { color: #e74c3c; font-weight: bold; cursor: pointer; margin-left: 5px; font-size: 14px; }
-    
+    .remove-btn {
+      color: #e74c3c;
+      font-weight: bold;
+      cursor: pointer;
+      margin-left: 5px;
+      font-size: 14px;
+    }
+
     /* Radio Styling */
-    .radio-group { margin-bottom: 10px; }
-    .radio-item { display: flex; align-items: start; margin-bottom: 6px; font-size: 12px; color: #2c3e50; }
-    .radio-item input { margin-right: 8px; margin-top: 2px; }
-    
+    .radio-group {
+      margin-bottom: 10px;
+    }
+
+    .radio-item {
+      display: flex;
+      align-items: start;
+      margin-bottom: 6px;
+      font-size: 12px;
+      color: #2c3e50;
+    }
+
+    .radio-item input {
+      margin-right: 8px;
+      margin-top: 2px;
+    }
+
     /* Loading */
-    .hidden { display: none; }
-    .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 24px; height: 24px; animation: spin 0.8s linear infinite; margin: 15px auto; }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    
+    .hidden {
+      display: none;
+    }
+
+    .spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #3498db;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      animation: spin 0.8s linear infinite;
+      margin: 15px auto;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
     /* Lists */
-    .read-only-text { background: #ecf0f1; padding: 8px; border-radius: 4px; font-size: 12px; color: #2c3e50; border: 1px solid #bdc3c7; }
-    ul.tool-list { list-style: none; padding: 0; margin: 0; }
-    li.tool-item { padding: 10px 0; border-bottom: 1px solid #eee; }
-    li.tool-item:last-child { border-bottom: none; }
-    
-    .part-id { font-weight: 700; color: #2c3e50; font-size: 13px; display: block; }
-    .part-desc { font-size: 11px; color: #7f8c8d; display: block; margin-bottom: 5px; }
-    
+    .read-only-text {
+      background: #ecf0f1;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #2c3e50;
+      border: 1px solid #bdc3c7;
+    }
+
+    ul.tool-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    li.tool-item {
+      padding: 10px 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    li.tool-item:last-child {
+      border-bottom: none;
+    }
+
+    .part-id {
+      font-weight: 700;
+      color: #2c3e50;
+      font-size: 13px;
+      display: block;
+    }
+
+    .part-desc {
+      font-size: 11px;
+      color: #7f8c8d;
+      display: block;
+      margin-bottom: 5px;
+    }
+
     /* Alerts */
-    .required-select { border: 2px solid #e74c3c; background-color: #fffafa; margin-top: 5px; }
-    .alert-label { color: #e74c3c; font-size: 10px; font-weight: 800; margin-top: 6px; display: block; }
-    
+    .required-select {
+      border: 2px solid #e74c3c;
+      background-color: #fffafa;
+      margin-top: 5px;
+    }
+
+    .alert-label {
+      color: #e74c3c;
+      font-size: 10px;
+      font-weight: 800;
+      margin-top: 6px;
+      display: block;
+    }
+
     /* Group Label for Categories */
-    .group-label { font-size: 11px; font-weight: bold; color: #555; margin-top: 8px; margin-bottom: 2px; text-transform: uppercase; }
+    .group-label {
+      font-size: 11px;
+      font-weight: bold;
+      color: #555;
+      margin-top: 8px;
+      margin-bottom: 2px;
+      text-transform: uppercase;
+    }
 
     /* Buttons */
-    .btn-group { margin-top: 15px; border-top: 1px solid #ddd; padding-top: 10px; }
-    button { width: 100%; padding: 10px; background-color: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600; margin-bottom: 5px; }
-    button:hover { background-color: #219150; }
-    button#btnSave { background-color: #2980b9; }
-    button#btnSave:hover { background-color: #2c3e50; }
-    button#btnClose { background-color: #95a5a6; }
-    button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+    .btn-group {
+      margin-top: 15px;
+      border-top: 1px solid #ddd;
+      padding-top: 10px;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      background-color: #27ae60;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 600;
+      margin-bottom: 5px;
+    }
+
+    button:hover {
+      background-color: #219150;
+    }
+
+    button#btnSave {
+      background-color: #2980b9;
+    }
+
+    button#btnSave:hover {
+      background-color: #2c3e50;
+    }
+
+    button#btnClose {
+      background-color: #95a5a6;
+    }
+
+    button:disabled {
+      background-color: #bdc3c7;
+      cursor: not-allowed;
+    }
 
     /* OptGroup Styling */
-    optgroup { font-weight: bold; color: #2c3e50; }
+    optgroup {
+      font-weight: bold;
+      color: #2c3e50;
+    }
   </style>
 </head>
+
 <body>
 
   <!-- NAVIGATION TABS -->
@@ -93,127 +321,129 @@
 
   <!-- VIEW 1: MODULE CONFIGURATOR -->
   <div id="viewModule">
-      <h3>Module Configurator</h3>
-      
-      <!-- Step 1: Module Selector -->
+    <h3>Module Configurator</h3>
+
+    <!-- Step 1: Module Selector -->
+    <div class="card">
+      <span class="label">1. Select Module</span>
+      <select id="moduleSelect" onchange="loadModuleData()">
+        <option value="" disabled selected>Loading...</option>
+      </select>
+    </div>
+
+    <!-- Step 2: Configuration Form -->
+    <div id="configContainer" class="hidden">
+
+      <!-- Electrical -->
       <div class="card">
-        <span class="label">1. Select Module</span>
-        <select id="moduleSelect" onchange="loadModuleData()">
-          <option value="" disabled selected>Loading...</option>
+        <span class="label">Electrical (Auto-Assigned)</span>
+        <div id="elecBox" class="read-only-text">None</div>
+      </div>
+
+      <!-- Tooling -->
+      <div class="card tooling">
+        <span class="label">Tooling & Tips</span>
+        <ul id="toolList" class="tool-list"></ul>
+      </div>
+
+      <!-- Vision -->
+      <div id="visionCard" class="card vision hidden">
+        <span class="label">Vision System</span>
+        <select id="visionSelect"></select>
+      </div>
+
+      <!-- Jigs -->
+      <div class="card">
+        <span class="label">Jigs (Included)</span>
+        <div id="jigsBox" style="font-size:11px; color:#7f8c8d;">None</div>
+      </div>
+
+      <!-- Spare Parts -->
+      <div id="spareCard" class="card spare hidden">
+        <span class="label">Spare Parts (Bundle)</span>
+        <ul id="spareList" class="tool-list" style="margin-bottom: 8px;"></ul>
+
+        <span class="alert-label">⚠ DECISION REQUIRED:</span>
+        <select id="spareSelect" class="required-select">
+          <option value="" selected>Select Option...</option>
+          <option value="yes">Yes, Include All</option>
+          <option value="no">No, Skip</option>
         </select>
       </div>
 
-      <!-- Step 2: Configuration Form -->
-      <div id="configContainer" class="hidden">
-        
-        <!-- Electrical -->
-        <div class="card">
-          <span class="label">Electrical (Auto-Assigned)</span>
-          <div id="elecBox" class="read-only-text">None</div>
+      <!-- NEW: Quantity Selector (Phase 4.1) -->
+      <div class="card qty">
+        <span class="label">Number of Vision Systems (Qty)</span>
+        <select id="numVisionSelect">
+          <option value="1" selected>1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+          <option value="5">5</option>
+          <option value="6">6</option>
+          <option value="7">7</option>
+          <option value="8">8</option>
+          <option value="9">9</option>
+          <option value="10">10</option>
+        </select>
+      </div>
+
+      <!-- Layout Settings (NEW) -->
+      <div class="card layout">
+        <span class="label">Machine Layout Settings (Optional)</span>
+
+        <div style="margin-bottom: 10px;">
+          <span id="vcmTitle" class="part-desc" style="font-weight:bold; margin-bottom:4px;">VCM Configuration</span>
+          <div id="vcmContainer" class="radio-group">Loading...</div>
         </div>
 
-        <!-- Tooling -->
-        <div class="card tooling">
-          <span class="label">Tooling & Tips</span>
-          <ul id="toolList" class="tool-list"></ul>
-        </div>
-
-        <!-- Vision -->
-        <div id="visionCard" class="card vision hidden">
-          <span class="label">Vision System</span>
-          <select id="visionSelect"></select>
-        </div>
-        
-        <!-- Jigs -->
-        <div class="card">
-          <span class="label">Jigs (Included)</span>
-          <div id="jigsBox" style="font-size:11px; color:#7f8c8d;">None</div>
-        </div>
-
-        <!-- Spare Parts -->
-        <div id="spareCard" class="card spare hidden">
-          <span class="label">Spare Parts (Bundle)</span>
-          <ul id="spareList" class="tool-list" style="margin-bottom: 8px;"></ul>
-          
-          <span class="alert-label">⚠ DECISION REQUIRED:</span>
-          <select id="spareSelect" class="required-select">
-            <option value="" selected>Select Option...</option>
-            <option value="yes">Yes, Include All</option>
-            <option value="no">No, Skip</option>
-          </select>
-        </div>
-
-        <!-- NEW: Quantity Selector (Phase 4.1) -->
-        <div class="card qty">
-          <span class="label">Number of Vision Systems (Qty)</span>
-          <select id="numVisionSelect">
-            <option value="1" selected>1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-            <option value="7">7</option>
-            <option value="8">8</option>
-            <option value="9">9</option>
-            <option value="10">10</option>
-          </select>
-        </div>
-
-        <!-- Layout Settings (NEW) -->
-        <div class="card layout">
-          <span class="label">Machine Layout Settings (Optional)</span>
-          
-          <div style="margin-bottom: 10px;">
-            <span id="vcmTitle" class="part-desc" style="font-weight:bold; margin-bottom:4px;">VCM Configuration</span>
-            <div id="vcmContainer" class="radio-group">Loading...</div>
-          </div>
-          
-          <div>
-             <span id="valveTitle" class="part-desc" style="font-weight:bold; margin-bottom:4px;">Valve Set Configuration</span>
-             <div id="valveContainer" class="radio-group">Loading...</div>
-          </div>
-        </div>
-
-        <div class="btn-group">
-          <button id="btnSave" onclick="saveConfiguration()">Save Module Config</button>
-          <button id="btnClose" onclick="google.script.host.close()">Close</button>
+        <div>
+          <span id="valveTitle" class="part-desc" style="font-weight:bold; margin-bottom:4px;">Valve Set
+            Configuration</span>
+          <div id="valveContainer" class="radio-group">Loading...</div>
         </div>
       </div>
+
+      <div class="btn-group">
+        <button id="btnSave" onclick="saveConfiguration()">Save Module Config</button>
+        <button id="btnClose" onclick="google.script.host.close()">Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- VIEW 2: MACHINE SETUP (NEW PHASE 6) -->
   <div id="viewSetup" class="hidden">
-      <h3>Machine Setup</h3>
+    <h3>Machine Setup</h3>
 
-      <!-- 1. Vision PC -->
-      <div class="card setup">
-          <span class="label">1. Vision PC</span>
-          <select id="visionPCSelect" onchange="handleVisionPCChange()">
-              <option value="" disabled selected>Loading Options...</option>
-          </select>
-          <input type="text" id="visionPCOtherInput" class="hidden" placeholder="Enter Custom Part ID (Required)">
-      </div>
+    <!-- 1. Vision PC -->
+    <div class="card setup">
+      <span class="label">1. Vision PC</span>
+      <select id="visionPCSelect" onchange="handleVisionPCChange()">
+        <option value="" disabled selected>Loading Options...</option>
+      </select>
+      <input type="text" id="visionPCOtherInput" class="hidden" placeholder="Enter Custom Part ID (Required)">
+    </div>
 
-      <!-- 2. Configurable Base Module (Updated) -->
-      <div class="card setup">
-          <span class="label">2. Configurable Base Module</span>
-          <div id="baseModuleList"></div>
-          <button id="btnAddBaseModule" class="small-btn" onclick="addBaseModuleRow()" style="margin-top:8px;">+ Add Module</button>
-      </div>
-      
-      <!-- 3. Base Module Tooling (NEW) -->
-      <div class="card setup">
-          <span class="label">3. Base Module Tooling</span>
-          <div id="baseToolingList">
-             <div class="read-only-text">Loading...</div>
-          </div>
-      </div>
+    <!-- 2. Configurable Base Module (Updated) -->
+    <div class="card setup">
+      <span class="label">2. Configurable Base Module</span>
+      <div id="baseModuleList"></div>
+      <button id="btnAddBaseModule" class="small-btn" onclick="addBaseModuleRow()" style="margin-top:8px;">+ Add
+        Module</button>
+    </div>
 
-      <div class="btn-group">
-          <button id="btnSaveSetup" onclick="saveMachineSetup()">Save Machine Setup</button>
-          <button onclick="google.script.host.close()">Close</button>
+    <!-- 3. Base Module Tooling (NEW) -->
+    <div class="card setup">
+      <span class="label">3. Base Module Tooling</span>
+      <div id="baseToolingList">
+        <div class="read-only-text">Loading...</div>
       </div>
+    </div>
+
+    <div class="btn-group">
+      <button id="btnSaveSetup" onclick="saveMachineSetup()">Save Machine Setup</button>
+      <button onclick="google.script.host.close()">Close</button>
+    </div>
   </div>
 
   <script>
@@ -223,11 +453,11 @@
     var baseModuleOptions = []; // Cache options
     var MAX_BASE_MODULES = 0; // Will match option count
     var baseToolingData = []; // Cache tooling list
-    
+
     // Cache for Multi-Select Options
     var multiSelectCache = {};
 
-    window.onload = function() {
+    window.onload = function () {
       // Load Module Data on Start
       google.script.run.withSuccessHandler(populateModuleDropdown).getModuleList();
       google.script.run.withSuccessHandler(renderLayoutSettings).getLayoutHeaders();
@@ -235,565 +465,591 @@
 
     // --- TAB SWITCHER LOGIC ---
     function switchTab(tabName) {
-        if (tabName === 'MODULE') {
-            document.getElementById('viewModule').classList.remove('hidden');
-            document.getElementById('viewSetup').classList.add('hidden');
-            document.getElementById('tabModule').classList.add('active');
-            document.getElementById('tabSetup').classList.remove('active');
-        } else {
-            document.getElementById('viewModule').classList.add('hidden');
-            document.getElementById('viewSetup').classList.remove('hidden');
-            document.getElementById('tabModule').classList.remove('active');
-            document.getElementById('tabSetup').classList.add('active');
-            
-            // Lazy Load Setup Data only once
-            if (!isSetupLoaded) {
-                loadSetupData();
-                loadBaseModuleData(); 
-                loadBaseModuleTooling(); // Trigger Tooling Fetch
-            }
+      if (tabName === 'MODULE') {
+        document.getElementById('viewModule').classList.remove('hidden');
+        document.getElementById('viewSetup').classList.add('hidden');
+        document.getElementById('tabModule').classList.add('active');
+        document.getElementById('tabSetup').classList.remove('active');
+      } else {
+        document.getElementById('viewModule').classList.add('hidden');
+        document.getElementById('viewSetup').classList.remove('hidden');
+        document.getElementById('tabModule').classList.remove('active');
+        document.getElementById('tabSetup').classList.add('active');
+
+        // Lazy Load Setup Data only once
+        if (!isSetupLoaded) {
+          loadSetupData();
+          loadBaseModuleData();
+          loadBaseModuleTooling(); // Trigger Tooling Fetch
         }
+      }
     }
 
     // --- MACHINE SETUP LOGIC ---
 
     function loadSetupData() {
-        var sel = document.getElementById("visionPCSelect");
-        sel.innerHTML = '<option value="" disabled selected>Loading...</option>';
-        
-        google.script.run.withSuccessHandler(function(options) {
-            renderVisionPCOptions(options);
-            isSetupLoaded = true;
-        }).getVisionPCOptions();
+      var sel = document.getElementById("visionPCSelect");
+      sel.innerHTML = '<option value="" disabled selected>Loading...</option>';
+
+      google.script.run.withSuccessHandler(function (options) {
+        renderVisionPCOptions(options);
+        isSetupLoaded = true;
+      }).getVisionPCOptions();
     }
 
     // --- Configurable Base Module Logic ---
     function loadBaseModuleData() {
-        google.script.run.withSuccessHandler(function(options) {
-            baseModuleOptions = options;
-            MAX_BASE_MODULES = options.length;
-            renderBaseModuleRows(3); // Default 3 rows
-        }).getBaseModuleOptions();
+      google.script.run.withSuccessHandler(function (options) {
+        baseModuleOptions = options;
+        MAX_BASE_MODULES = options.length;
+        renderBaseModuleRows(3); // Default 3 rows
+      }).getBaseModuleOptions();
     }
 
     function renderBaseModuleRows(count) {
-        var container = document.getElementById("baseModuleList");
-        container.innerHTML = "";
-        for (var i = 0; i < count; i++) {
-            createBaseModuleDropdown(container);
-        }
+      var container = document.getElementById("baseModuleList");
+      container.innerHTML = "";
+      for (var i = 0; i < count; i++) {
+        createBaseModuleDropdown(container);
+      }
     }
 
     function createBaseModuleDropdown(container) {
-        var div = document.createElement("div");
-        div.className = "row-item";
-        
-        var select = document.createElement("select");
-        select.className = "base-mod-select";
-        select.onchange = validateBaseModules; // Attach de-duplication
-        
-        var defaultOpt = document.createElement("option");
-        defaultOpt.value = "";
-        defaultOpt.text = "Select Module...";
-        select.appendChild(defaultOpt);
-        
-        baseModuleOptions.forEach(function(opt) {
-            var el = document.createElement("option");
-            el.value = opt.id;
-            el.text = opt.id + " | " + opt.desc;
-            select.appendChild(el);
-        });
+      var div = document.createElement("div");
+      div.className = "row-item";
 
-        div.appendChild(select);
-        container.appendChild(div);
-        
-        validateBaseModules(); // Run check immediately to set button state
+      var select = document.createElement("select");
+      select.className = "base-mod-select";
+      select.onchange = validateBaseModules; // Attach de-duplication
+
+      var defaultOpt = document.createElement("option");
+      defaultOpt.value = "";
+      defaultOpt.text = "Select Module...";
+      select.appendChild(defaultOpt);
+
+      baseModuleOptions.forEach(function (opt) {
+        var el = document.createElement("option");
+        el.value = opt.id;
+        el.text = opt.id + " | " + opt.desc;
+        select.appendChild(el);
+      });
+
+      div.appendChild(select);
+      container.appendChild(div);
+
+      validateBaseModules(); // Run check immediately to set button state
     }
 
     function addBaseModuleRow() {
-        var container = document.getElementById("baseModuleList");
-        var currentCount = container.children.length;
-        
-        if (currentCount >= MAX_BASE_MODULES) {
-            alert("No more options available to add.");
-            return;
-        }
-        createBaseModuleDropdown(container);
+      var container = document.getElementById("baseModuleList");
+      var currentCount = container.children.length;
+
+      if (currentCount >= MAX_BASE_MODULES) {
+        alert("No more options available to add.");
+        return;
+      }
+      createBaseModuleDropdown(container);
     }
 
     // Visual De-Duplication Strategy
     function validateBaseModules() {
-        var selects = document.querySelectorAll(".base-mod-select");
-        var usedValues = [];
-        
-        // Collect currently selected values
-        selects.forEach(function(s) {
-            if (s.value) usedValues.push(s.value);
-        });
+      var selects = document.querySelectorAll(".base-mod-select");
+      var usedValues = [];
 
-        // Gray out used values in ALL dropdowns
-        selects.forEach(function(s) {
-            var currentVal = s.value;
-            for (var i = 0; i < s.options.length; i++) {
-                var opt = s.options[i];
-                if (opt.value === "") continue;
-                
-                // Disable if used elsewhere (in usedValues list BUT not this specific select's value)
-                if (usedValues.includes(opt.value) && opt.value !== currentVal) {
-                    opt.disabled = true;
-                    opt.style.color = "#ccc";
-                } else {
-                    opt.disabled = false;
-                    opt.style.color = "#333";
-                }
-            }
-        });
-        
-        // Disable Add Button if all options used
-        var btn = document.getElementById("btnAddBaseModule");
-        if (selects.length >= MAX_BASE_MODULES) {
-            btn.style.display = "none";
-        } else {
-            btn.style.display = "inline-block";
+      // Collect currently selected values
+      selects.forEach(function (s) {
+        if (s.value) usedValues.push(s.value);
+      });
+
+      // Gray out used values in ALL dropdowns
+      selects.forEach(function (s) {
+        var currentVal = s.value;
+        for (var i = 0; i < s.options.length; i++) {
+          var opt = s.options[i];
+          if (opt.value === "") continue;
+
+          // Disable if used elsewhere (in usedValues list BUT not this specific select's value)
+          if (usedValues.includes(opt.value) && opt.value !== currentVal) {
+            opt.disabled = true;
+            opt.style.color = "#ccc";
+          } else {
+            opt.disabled = false;
+            opt.style.color = "#333";
+          }
         }
+      });
+
+      // Disable Add Button if all options used
+      var btn = document.getElementById("btnAddBaseModule");
+      if (selects.length >= MAX_BASE_MODULES) {
+        btn.style.display = "none";
+      } else {
+        btn.style.display = "inline-block";
+      }
     }
 
     // --- Base Module Tooling Logic (UPDATED FOR PHASE 6 HYBRID + HIERARCHY) ---
     function loadBaseModuleTooling() {
-       google.script.run.withSuccessHandler(function(tools) {
-          baseToolingData = tools; // Cache
-          renderBaseModuleTooling();
-       }).getBaseModuleToolingList();
+      google.script.run.withSuccessHandler(function (tools) {
+        baseToolingData = tools; // Cache
+        renderBaseModuleTooling();
+      }).getBaseModuleToolingList();
     }
 
     function renderBaseModuleTooling() {
-       var container = document.getElementById("baseToolingList");
-       container.innerHTML = "";
-       multiSelectCache = {}; // Reset Cache
-       
-       if (baseToolingData.length === 0) {
-          container.innerHTML = '<div class="read-only-text">No Base Tooling Found.</div>';
-          return;
-       }
+      var container = document.getElementById("baseToolingList");
+      container.innerHTML = "";
+      multiSelectCache = {}; // Reset Cache
 
-       baseToolingData.forEach(function(tool) {
-          var div = document.createElement("div");
-          div.className = "row-item";
-          div.dataset.toolId = tool.id;
-          div.dataset.toolDesc = tool.desc || ""; // Store Description for Payload
+      if (baseToolingData.length === 0) {
+        container.innerHTML = '<div class="read-only-text">No Base Tooling Found.</div>';
+        return;
+      }
 
-          // PARENT ID LABEL
-          var label = document.createElement("span");
-          label.className = "part-id";
-          label.textContent = tool.id + (tool.desc ? " | " + tool.desc : "");
-          div.appendChild(label);
+      baseToolingData.forEach(function (tool) {
+        var div = document.createElement("div");
+        div.className = "row-item";
+        div.dataset.toolId = tool.id;
+        div.dataset.toolDesc = tool.desc || ""; // Store Description for Payload
 
-          // --- LOGIC SPLIT: COMPLEX vs CATEGORIZED vs MULTI-SELECT vs STANDARD ---
-          
-          if (tool.type === 'CATEGORIZED_MULTI') {
-             // 1. Loop through Groups
-             div.dataset.toolType = 'CATEGORIZED_MULTI';
-             tool.groups.forEach(function(grp, index) {
-                 var groupContainer = document.createElement("div");
-                 groupContainer.className = "categorized-group-block";
-                 groupContainer.dataset.groupId = grp.id || ""; // Optional Ejector Needle ID
-                 groupContainer.dataset.groupName = grp.name;
-                 
-                 var groupLabel = document.createElement("div");
-                 groupLabel.className = "group-label";
-                 groupLabel.textContent = grp.name + (grp.id ? " (" + grp.id + ")" : ""); // Show ID if available
-                 groupContainer.appendChild(groupLabel);
-                 
-                 if (grp.type === 'single') {
-                     // Single Select Dropdown
-                     var select = document.createElement("select");
-                     select.className = "tool-opt-select categorized-single-select";
-                     select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
-                     select.innerHTML += buildCategorizedOptions(grp.options);
-                     select.setAttribute("required", "true");
-                     groupContainer.appendChild(select);
-                 } else {
-                     // Multi Select Logic (Reusing addMultiSelectRow)
-                     var multiContainer = document.createElement("div");
-                     multiContainer.className = "multi-select-container categorized-multi-select-container";
-                     groupContainer.appendChild(multiContainer);
-                     
-                     // Cache options with unique key for this group
-                     var cacheKey = tool.id + "_group_" + index;
-                     multiSelectCache[cacheKey] = grp.options;
-                     
-                     // Add Initial Row
-                     addMultiSelectRow(cacheKey, multiContainer);
-                     
-                     // Add Button
-                     var addBtn = document.createElement("div");
-                     addBtn.className = "link-btn";
-                     addBtn.textContent = "+ Add Another " + grp.name;
-                     addBtn.onclick = function() { addMultiSelectRow(cacheKey, multiContainer); };
-                     groupContainer.appendChild(addBtn);
-                 }
-                 div.appendChild(groupContainer);
-             });
-             
-          } else if (tool.type === 'COMPLEX') {
-             // ... [Existing Complex Logic] ...
-             var mandatoryBox = document.createElement("div");
-             mandatoryBox.className = "read-only-text";
-             mandatoryBox.style.marginBottom = "6px";
-             mandatoryBox.style.backgroundColor = "#e8eaed"; 
-             mandatoryBox.innerHTML = "🔒 <b>Included:</b> " + tool.mandatoryItem.id + " (" + (tool.mandatoryItem.desc || "") + ")";
-             div.appendChild(mandatoryBox);
-             
-             div.dataset.mandatoryId = tool.mandatoryItem.id;
-             div.dataset.mandatoryDesc = tool.mandatoryItem.desc || "";
-             div.dataset.toolType = "COMPLEX";
+        // PARENT ID LABEL
+        var label = document.createElement("span");
+        label.className = "part-id";
+        label.textContent = tool.id + (tool.desc ? " | " + tool.desc : "");
+        div.appendChild(label);
 
-             var select = document.createElement("select");
-             select.className = "tool-opt-select";
-             select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
-             select.innerHTML += buildCategorizedOptions(tool.options);
-             div.appendChild(select);
-             
-          } else if (tool.type === 'MULTI_SELECT') {
-             // ... [Existing Multi Logic] ...
-             div.dataset.toolType = "MULTI_SELECT";
-             multiSelectCache[tool.id] = tool.options;
-             
-             var multiContainer = document.createElement("div");
-             multiContainer.id = "multi-container-" + tool.id;
-             multiContainer.className = "multi-select-container";
-             div.appendChild(multiContainer);
-             
-             addMultiSelectRow(tool.id, multiContainer);
-             
-             var addBtn = document.createElement("div");
-             addBtn.className = "link-btn";
-             addBtn.textContent = "+ Add Another Option";
-             addBtn.onclick = function() { addMultiSelectRow(tool.id, multiContainer); };
-             div.appendChild(addBtn);
-             
+        // --- LOGIC SPLIT: COMPLEX vs CATEGORIZED vs MULTI-SELECT vs STANDARD ---
+
+        if (tool.type === 'CATEGORIZED_MULTI') {
+          // 1. Loop through Groups
+          div.dataset.toolType = 'CATEGORIZED_MULTI';
+          tool.groups.forEach(function (grp, index) {
+            var groupContainer = document.createElement("div");
+            groupContainer.className = "categorized-group-block";
+            groupContainer.dataset.groupId = grp.id || ""; // Optional Ejector Needle ID
+            groupContainer.dataset.groupName = grp.name;
+
+            var groupLabel = document.createElement("div");
+            groupLabel.className = "group-label";
+            groupLabel.textContent = grp.name + (grp.id ? " (" + grp.id + ")" : ""); // Show ID if available
+            groupContainer.appendChild(groupLabel);
+
+            if (grp.type === 'single') {
+              // Single Select Dropdown
+              var select = document.createElement("select");
+              select.className = "tool-opt-select categorized-single-select";
+              select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
+              select.innerHTML += buildCategorizedOptions(grp.options);
+              select.setAttribute("required", "true");
+              groupContainer.appendChild(select);
+            } else {
+              // Multi Select Logic (Reusing addMultiSelectRow)
+              var multiContainer = document.createElement("div");
+              multiContainer.className = "multi-select-container categorized-multi-select-container";
+              groupContainer.appendChild(multiContainer);
+
+              // Cache options with unique key for this group
+              var cacheKey = tool.id + "_group_" + index;
+              multiSelectCache[cacheKey] = grp.options;
+
+              // Add Initial Row
+              addMultiSelectRow(cacheKey, multiContainer);
+
+              // Add Button
+              var addBtn = document.createElement("div");
+              addBtn.className = "link-btn";
+              addBtn.textContent = "+ Add Another " + grp.name;
+              addBtn.onclick = function () { addMultiSelectRow(cacheKey, multiContainer); };
+              groupContainer.appendChild(addBtn);
+            }
+            div.appendChild(groupContainer);
+          });
+
+        } else if (tool.type === 'COMPLEX') {
+          // ... [Existing Complex Logic] ...
+          var mandatoryBox = document.createElement("div");
+          mandatoryBox.className = "read-only-text";
+          mandatoryBox.style.marginBottom = "6px";
+          mandatoryBox.style.backgroundColor = "#e8eaed";
+          mandatoryBox.innerHTML = "🔒 <b>Included:</b> " + tool.mandatoryItem.id + " (" + (tool.mandatoryItem.desc || "") + ")";
+          div.appendChild(mandatoryBox);
+
+          div.dataset.mandatoryId = tool.mandatoryItem.id;
+          div.dataset.mandatoryDesc = tool.mandatoryItem.desc || "";
+          div.dataset.toolType = "COMPLEX";
+
+          var select = document.createElement("select");
+          select.className = "tool-opt-select";
+          select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
+          select.innerHTML += buildCategorizedOptions(tool.options);
+          div.appendChild(select);
+
+        } else if (tool.type === 'MULTI_SELECT') {
+          // ... [Existing Multi Logic] ...
+          div.dataset.toolType = "MULTI_SELECT";
+          multiSelectCache[tool.id] = tool.options;
+
+          var multiContainer = document.createElement("div");
+          multiContainer.id = "multi-container-" + tool.id;
+          multiContainer.className = "multi-select-container";
+          div.appendChild(multiContainer);
+
+          addMultiSelectRow(tool.id, multiContainer);
+
+          var addBtn = document.createElement("div");
+          addBtn.className = "link-btn";
+          addBtn.textContent = "+ Add Another Option";
+          addBtn.onclick = function () { addMultiSelectRow(tool.id, multiContainer); };
+          div.appendChild(addBtn);
+
+        } else {
+          // Standard Logic
+          div.dataset.toolType = "STANDARD";
+          if (tool.options && tool.options.length > 0) {
+            var select = document.createElement("select");
+            select.className = "tool-opt-select";
+            select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
+            select.innerHTML += buildCategorizedOptions(tool.options);
+            div.appendChild(select);
           } else {
-             // Standard Logic
-             div.dataset.toolType = "STANDARD";
-             if (tool.options && tool.options.length > 0) {
-                 var select = document.createElement("select");
-                 select.className = "tool-opt-select";
-                 select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
-                 select.innerHTML += buildCategorizedOptions(tool.options);
-                 div.appendChild(select);
-             } else {
-                 var info = document.createElement("div");
-                 info.className = "read-only-text";
-                 info.style.marginTop = "4px";
-                 info.style.color = "#7f8c8d";
-                 info.textContent = "Auto-Included (No Options)";
-                 div.appendChild(info);
-             }
+            var info = document.createElement("div");
+            info.className = "read-only-text";
+            info.style.marginTop = "4px";
+            info.style.color = "#7f8c8d";
+            info.textContent = "Auto-Included (No Options)";
+            div.appendChild(info);
           }
-          
-          container.appendChild(div);
-       });
+        }
+
+        container.appendChild(div);
+      });
     }
 
     // --- NEW: Multi-Select Helper Functions ---
     function addMultiSelectRow(cacheKey, containerSource) {
-        var container = (typeof containerSource === 'string') ? document.getElementById(containerSource) : containerSource;
-        if (!container) return;
+      var container = (typeof containerSource === 'string') ? document.getElementById(containerSource) : containerSource;
+      if (!container) return;
 
-        var options = multiSelectCache[cacheKey];
-        if (!options) return;
-        
-        var currentRows = container.querySelectorAll(".multi-select-row").length;
+      var options = multiSelectCache[cacheKey];
+      if (!options) return;
 
-        var rowDiv = document.createElement("div");
-        rowDiv.className = "row-item multi-select-row";
-        rowDiv.style.display = "flex";
-        rowDiv.style.alignItems = "center";
-        
-        var select = document.createElement("select");
-        select.className = "tool-opt-select multi-select-input-" + cacheKey; 
-        select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
-        select.innerHTML += buildCategorizedOptions(options);
-        
-        // Validation Hook
-        select.onchange = function() { validateMultiSelect(cacheKey); };
-        
-        rowDiv.appendChild(select);
-        
-        if (currentRows > 0) {
-            var removeBtn = document.createElement("span");
-            removeBtn.className = "remove-btn";
-            removeBtn.innerHTML = "&times;";
-            removeBtn.onclick = function() {
-                container.removeChild(rowDiv);
-                validateMultiSelect(cacheKey); 
-            };
-            rowDiv.appendChild(removeBtn);
-        }
+      var currentRows = container.querySelectorAll(".multi-select-row").length;
 
-        container.appendChild(rowDiv);
-        validateMultiSelect(cacheKey);
+      var rowDiv = document.createElement("div");
+      rowDiv.className = "row-item multi-select-row";
+      rowDiv.style.display = "flex";
+      rowDiv.style.alignItems = "center";
+
+      var select = document.createElement("select");
+      select.className = "tool-opt-select multi-select-input-" + cacheKey;
+      select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
+      select.innerHTML += buildCategorizedOptions(options);
+
+      // Validation Hook
+      select.onchange = function () { validateMultiSelect(cacheKey); };
+
+      rowDiv.appendChild(select);
+
+      if (currentRows > 0) {
+        var removeBtn = document.createElement("span");
+        removeBtn.className = "remove-btn";
+        removeBtn.innerHTML = "&times;";
+        removeBtn.onclick = function () {
+          container.removeChild(rowDiv);
+          validateMultiSelect(cacheKey);
+        };
+        rowDiv.appendChild(removeBtn);
+      }
+
+      container.appendChild(rowDiv);
+      validateMultiSelect(cacheKey);
     }
-    
+
     function validateMultiSelect(cacheKey) {
-        var selects = document.querySelectorAll(".multi-select-input-" + cacheKey);
-        var usedValues = [];
-        selects.forEach(function(s) { if (s.value) usedValues.push(s.value); });
-        
-        selects.forEach(function(s) {
-            var currentVal = s.value;
-            for (var i = 0; i < s.options.length; i++) {
-                var opt = s.options[i];
-                if (opt.value === "") continue;
-                if (usedValues.includes(opt.value) && opt.value !== currentVal) {
-                    opt.disabled = true; opt.style.color = "#ccc";
-                } else {
-                    opt.disabled = false; opt.style.color = "#333";
-                }
-            }
-        });
+      var selects = document.querySelectorAll(".multi-select-input-" + cacheKey);
+      var usedValues = [];
+      selects.forEach(function (s) { if (s.value) usedValues.push(s.value); });
+
+      selects.forEach(function (s) {
+        var currentVal = s.value;
+        for (var i = 0; i < s.options.length; i++) {
+          var opt = s.options[i];
+          if (opt.value === "") continue;
+          if (usedValues.includes(opt.value) && opt.value !== currentVal) {
+            opt.disabled = true; opt.style.color = "#ccc";
+          } else {
+            opt.disabled = false; opt.style.color = "#333";
+          }
+        }
+      });
     }
-    
+
     // Helper to get text description from select element
     function getSelectedText(selectEl) {
-       if (selectEl.selectedIndex === -1) return "";
-       // Remove "ID | " prefix if present in text
-       var text = selectEl.options[selectEl.selectedIndex].text;
-       if (text.includes(" | ")) {
-           return text.split(" | ")[1];
-       }
-       return text;
+      if (selectEl.selectedIndex === -1) return "";
+      // Remove "ID | " prefix if present in text
+      var text = selectEl.options[selectEl.selectedIndex].text;
+      if (text.includes(" | ")) {
+        return text.split(" | ")[1];
+      }
+      return text;
     }
 
     // --- Vision PC Helpers ---
     function renderVisionPCOptions(options) {
-        var sel = document.getElementById("visionPCSelect");
-        sel.innerHTML = '<option value="" disabled selected>Select Vision PC...</option>';
-        
-        options.forEach(function(opt) {
-            var el = document.createElement("option");
-            el.value = opt.id;
-            el.text = opt.id + " | " + opt.desc;
-            sel.appendChild(el);
-        });
-        
-        // Add "Other" Option
-        var otherEl = document.createElement("option");
-        otherEl.value = "OTHER";
-        otherEl.text = "Other (Manual Input)";
-        sel.appendChild(otherEl);
+      var sel = document.getElementById("visionPCSelect");
+      sel.innerHTML = '<option value="" disabled selected>Select Vision PC...</option>';
+
+      options.forEach(function (opt) {
+        var el = document.createElement("option");
+        el.value = opt.id;
+        el.text = opt.id + " | " + opt.desc;
+        sel.appendChild(el);
+      });
+
+      // Add "Other" Option
+      var otherEl = document.createElement("option");
+      otherEl.value = "OTHER";
+      otherEl.text = "Other (Manual Input)";
+      sel.appendChild(otherEl);
     }
 
     function handleVisionPCChange() {
-        var val = document.getElementById("visionPCSelect").value;
-        var input = document.getElementById("visionPCOtherInput");
-        
-        if (val === "OTHER") {
-            input.classList.remove("hidden");
-            input.focus();
-        } else {
-            input.classList.add("hidden");
-            input.value = ""; 
-        }
+      var val = document.getElementById("visionPCSelect").value;
+      var input = document.getElementById("visionPCOtherInput");
+
+      if (val === "OTHER") {
+        input.classList.remove("hidden");
+        input.focus();
+      } else {
+        input.classList.add("hidden");
+        input.value = "";
+      }
     }
 
     // --- REFACTORED SAVE LOGIC FOR HIERARCHICAL TREE ---
     function saveMachineSetup() {
-        var payload = {};
-        
-        // 1. Vision PC Logic
-        var visionSelect = document.getElementById("visionPCSelect");
-        var visionVal = visionSelect.value;
-        
-        if (!visionVal) {
-            alert("Please select a Vision PC.");
-            return;
+      var payload = {};
+
+      // 1. Vision PC Logic
+      var visionSelect = document.getElementById("visionPCSelect");
+      var visionVal = visionSelect.value;
+
+      if (!visionVal) {
+        alert("Please select a Vision PC.");
+        return;
+      }
+
+      if (visionVal === "OTHER") {
+        var manualVal = document.getElementById("visionPCOtherInput").value;
+        if (!manualVal.trim()) {
+          alert("Please enter a Custom Part ID for 'Other'.");
+          return;
         }
-        
-        if (visionVal === "OTHER") {
-            var manualVal = document.getElementById("visionPCOtherInput").value;
-            if (!manualVal.trim()) {
-                alert("Please enter a Custom Part ID for 'Other'.");
-                return;
+        payload.visionPC = manualVal.trim();
+      } else {
+        payload.visionPC = visionVal;
+      }
+
+      // 2. Configurable Base Module Logic
+      payload.baseModules = [];
+      var baseSelects = document.querySelectorAll(".base-mod-select");
+      baseSelects.forEach(function (s) {
+        if (s.value) {
+          payload.baseModules.push(s.value);
+        }
+      });
+
+      // 3. Base Module Tooling Logic (HIERARCHICAL PAYLOAD BUILDER)
+      payload.baseTooling = [];
+      // FIX: Use strict child selector (>) to verify we only get top-level tools
+      // and NOT nested .row-item divs (like those in multi-selects)
+      var toolRows = document.querySelectorAll("#baseToolingList > .row-item");
+      var missingSelection = false;
+
+      toolRows.forEach(function (row) {
+        var toolId = row.dataset.toolId;
+        var toolDesc = row.dataset.toolDesc;
+        var toolType = row.dataset.toolType;
+
+        // Construct Parent Object
+        var toolObj = {
+          id: toolId,
+          desc: toolDesc,
+          structure: [] // To hold Level 2 (Options/Groups) and Level 3 (Children)
+        };
+
+        // --- CATEGORIZED MULTI SAVE LOGIC ---
+        if (toolType === 'CATEGORIZED_MULTI') {
+          var groupBlocks = row.querySelectorAll(".categorized-group-block");
+          var hasSelectedInTool = false;
+
+          groupBlocks.forEach(function (block) {
+            var groupName = block.dataset.groupName;
+            var groupId = block.dataset.groupId; // E.g., 430001-A381 for needles
+
+            var currentGroupStruct = null;
+            var optionsFound = [];
+            var seenIDs = new Set(); // SANITATION: Filter Duplicates
+
+            // 1. Check Single Selects
+            var singleSelects = block.querySelectorAll(".categorized-single-select");
+            singleSelects.forEach(function (s) {
+              if (s.value && !seenIDs.has(s.value)) {
+                optionsFound.push({ id: s.value, desc: getSelectedText(s) });
+                seenIDs.add(s.value);
+              } else if (!s.value) {
+                missingSelection = true;
+              }
+            });
+
+            // 2. Check Multi Selects
+            var multiContainers = block.querySelectorAll(".categorized-multi-select-container");
+            multiContainers.forEach(function (cont) {
+              var selects = cont.querySelectorAll("select");
+              var hasAtLeastOne = false;
+              selects.forEach(function (s) {
+                // SANITATION: Filter Empty
+                if (s.value && !seenIDs.has(s.value)) {
+                  optionsFound.push({ id: s.value, desc: getSelectedText(s) });
+                  seenIDs.add(s.value);
+                  hasAtLeastOne = true;
+                }
+              });
+              if (!hasAtLeastOne) missingSelection = true;
+            });
+
+            if (optionsFound.length > 0) {
+              hasSelectedInTool = true;
+              if (groupId) {
+                // This is a Level 2 Group Header (e.g. Needles)
+                currentGroupStruct = {
+                  type: "group",
+                  id: groupId,
+                  desc: groupName, // "OPTIONAL EJECTOR NEEDLE"
+                  children: []
+                };
+                // Add options as Level 3 Children
+                optionsFound.forEach(function (opt) {
+                  currentGroupStruct.children.push({ type: "item", id: opt.id, desc: opt.desc });
+                });
+                toolObj.structure.push(currentGroupStruct);
+              } else {
+                // This is just a list of Level 2 Options (e.g. Housing)
+                optionsFound.forEach(function (opt) {
+                  toolObj.structure.push({ type: "option", id: opt.id, desc: opt.desc });
+                });
+              }
             }
-            payload.visionPC = manualVal.trim();
+          });
+
+          if (hasSelectedInTool) payload.baseTooling.push(toolObj);
+
+        } else if (toolType === 'COMPLEX') {
+          // Mandatory Item (Level 2)
+          if (row.dataset.mandatoryId) {
+            toolObj.structure.push({
+              type: "option",
+              id: row.dataset.mandatoryId,
+              desc: row.dataset.mandatoryDesc
+            });
+          }
+
+          // Selected Option (Level 2)
+          var select = row.querySelector("select.tool-opt-select");
+          if (select && select.value) {
+            toolObj.structure.push({
+              type: "option",
+              id: select.value,
+              desc: getSelectedText(select)
+            });
+          } else {
+            if (select) missingSelection = true;
+          }
+
+          payload.baseTooling.push(toolObj);
+
+        } else if (toolType === 'MULTI_SELECT') {
+          // ... [Multi Select Logic] ...
+          var selects = row.querySelectorAll(".multi-select-input-" + toolId);
+          var hasSelected = false;
+          var seenIDs = new Set();
+
+          selects.forEach(function (s) {
+            // SANITATION: Filter Empty & Duplicate
+            if (s.value && !seenIDs.has(s.value)) {
+              toolObj.structure.push({ type: "option", id: s.value, desc: getSelectedText(s) });
+              seenIDs.add(s.value);
+              hasSelected = true;
+            } else if (!s.value) {
+              missingSelection = true;
+            }
+          });
+
+          if (hasSelected) payload.baseTooling.push(toolObj);
+
         } else {
-            payload.visionPC = visionVal;
-        }
-
-        // 2. Configurable Base Module Logic
-        payload.baseModules = [];
-        var baseSelects = document.querySelectorAll(".base-mod-select");
-        baseSelects.forEach(function(s) {
-            if (s.value) {
-                payload.baseModules.push(s.value);
+          // Standard Logic
+          var select = row.querySelector("select.tool-opt-select");
+          if (select) {
+            if (select.value) {
+              toolObj.structure.push({ type: "option", id: select.value, desc: getSelectedText(select) });
+              payload.baseTooling.push(toolObj);
+            } else {
+              missingSelection = true;
             }
-        });
-        
-        // 3. Base Module Tooling Logic (HIERARCHICAL PAYLOAD BUILDER)
-        payload.baseTooling = [];
-        var toolRows = document.querySelectorAll("#baseToolingList .row-item");
-        var missingSelection = false;
-
-        toolRows.forEach(function(row) {
-           var toolId = row.dataset.toolId;
-           var toolDesc = row.dataset.toolDesc;
-           var toolType = row.dataset.toolType;
-           
-           // Construct Parent Object
-           var toolObj = {
-               id: toolId,
-               desc: toolDesc,
-               structure: [] // To hold Level 2 (Options/Groups) and Level 3 (Children)
-           };
-
-           // --- CATEGORIZED MULTI SAVE LOGIC ---
-           if (toolType === 'CATEGORIZED_MULTI') {
-               var groupBlocks = row.querySelectorAll(".categorized-group-block");
-               var hasSelectedInTool = false;
-
-               groupBlocks.forEach(function(block) {
-                   var groupName = block.dataset.groupName;
-                   var groupId = block.dataset.groupId; // E.g., 430001-A381 for needles
-                   
-                   var currentGroupStruct = null;
-                   var optionsFound = [];
-                   var seenIDs = new Set(); // SANITATION: Filter Duplicates
-                   
-                   // 1. Check Single Selects
-                   var singleSelects = block.querySelectorAll(".categorized-single-select");
-                   singleSelects.forEach(function(s) {
-                       if (s.value && !seenIDs.has(s.value)) {
-                           optionsFound.push({ id: s.value, desc: getSelectedText(s) });
-                           seenIDs.add(s.value);
-                       } else if (!s.value) {
-                           missingSelection = true;
-                       }
-                   });
-                   
-                   // 2. Check Multi Selects
-                   var multiContainers = block.querySelectorAll(".categorized-multi-select-container");
-                   multiContainers.forEach(function(cont) {
-                       var selects = cont.querySelectorAll("select");
-                       var hasAtLeastOne = false;
-                       selects.forEach(function(s) {
-                           // SANITATION: Filter Empty
-                           if (s.value && !seenIDs.has(s.value)) {
-                               optionsFound.push({ id: s.value, desc: getSelectedText(s) });
-                               seenIDs.add(s.value);
-                               hasAtLeastOne = true;
-                           }
-                       });
-                       if (!hasAtLeastOne) missingSelection = true; 
-                   });
-                   
-                   if (optionsFound.length > 0) {
-                       hasSelectedInTool = true;
-                       if (groupId) {
-                           // This is a Level 2 Group Header (e.g. Needles)
-                           currentGroupStruct = {
-                               type: "group",
-                               id: groupId,
-                               desc: groupName, // "OPTIONAL EJECTOR NEEDLE"
-                               children: []
-                           };
-                           // Add options as Level 3 Children
-                           optionsFound.forEach(function(opt) {
-                               currentGroupStruct.children.push({ type: "item", id: opt.id, desc: opt.desc });
-                           });
-                           toolObj.structure.push(currentGroupStruct);
-                       } else {
-                           // This is just a list of Level 2 Options (e.g. Housing)
-                           optionsFound.forEach(function(opt) {
-                               toolObj.structure.push({ type: "option", id: opt.id, desc: opt.desc });
-                           });
-                       }
-                   }
-               });
-               
-               if (hasSelectedInTool) payload.baseTooling.push(toolObj);
-
-           } else if (toolType === 'COMPLEX') {
-               // Mandatory Item (Level 2)
-               if (row.dataset.mandatoryId) {
-                   toolObj.structure.push({ 
-                       type: "option", 
-                       id: row.dataset.mandatoryId, 
-                       desc: row.dataset.mandatoryDesc 
-                   });
-               }
-               
-               // Selected Option (Level 2)
-               var select = row.querySelector("select.tool-opt-select");
-               if (select && select.value) {
-                   toolObj.structure.push({ 
-                       type: "option", 
-                       id: select.value, 
-                       desc: getSelectedText(select) 
-                   });
-               } else {
-                   if (select) missingSelection = true;
-               }
-               
-               payload.baseTooling.push(toolObj);
-               
-           } else if (toolType === 'MULTI_SELECT') {
-               // ... [Multi Select Logic] ...
-               var selects = row.querySelectorAll(".multi-select-input-" + toolId);
-               var hasSelected = false;
-               var seenIDs = new Set();
-               
-               selects.forEach(function(s) {
-                  // SANITATION: Filter Empty & Duplicate
-                  if (s.value && !seenIDs.has(s.value)) {
-                      toolObj.structure.push({ type: "option", id: s.value, desc: getSelectedText(s) });
-                      seenIDs.add(s.value);
-                      hasSelected = true;
-                  } else if (!s.value) {
-                      missingSelection = true;
-                  }
-               });
-               
-               if (hasSelected) payload.baseTooling.push(toolObj);
-               
-           } else {
-               // Standard Logic
-               var select = row.querySelector("select.tool-opt-select");
-               if (select) {
-                   if (select.value) {
-                       toolObj.structure.push({ type: "option", id: select.value, desc: getSelectedText(select) });
-                       payload.baseTooling.push(toolObj);
-                   } else {
-                       missingSelection = true;
-                   }
-               } else {
-                   // Auto-Included (No Options) - Just push Parent
-                   payload.baseTooling.push(toolObj);
-               }
-           }
-        });
-        
-        if (missingSelection) {
-           alert("Please ensure all required tooling options are selected.");
-           return;
+          } else {
+            // Auto-Included (No Options) - Just push Parent
+            payload.baseTooling.push(toolObj);
+          }
         }
+      });
 
-        var btn = document.getElementById("btnSaveSetup");
-        btn.disabled = true;
-        btn.textContent = "Saving...";
-        
+      if (missingSelection) {
+        alert("Please ensure all required tooling options are selected.");
+        return;
+      }
+
+      var btn = document.getElementById("btnSaveSetup");
+      btn.disabled = true;
+      btn.textContent = "Saving...";
+
+      // ROBUST SERIALIZATION STRATEGY
+      try {
+        console.log("Preparing Payload Object:", payload);
+
+        // 1. Attempt Local Stringification to catch Circular Refs / Bad Types
+        var payloadString = JSON.stringify(payload);
+        console.log("Payload Stringified successfully. Length: " + payloadString.length);
+
+        // 2. Send as STRING to bypass Warden serializer issues
         google.script.run
-            .withSuccessHandler(function() {
-                alert("Machine Setup Saved Successfully!");
-                btn.disabled = false;
-                btn.textContent = "Save Machine Setup";
-            })
-            .withFailureHandler(function(err) {
-                alert("Error: " + err.message);
-                btn.disabled = false;
-                btn.textContent = "Save Machine Setup";
-            })
-            .saveMachineSetup(payload);
+          .withSuccessHandler(function (response) {
+            // Check if the backend returned an error wrapped in success (Diagnostic Mode)
+            if (response && response.status === 'error') {
+              alert("Backend Error: " + response.message);
+            } else {
+              var msg = "Machine Setup Saved Successfully!";
+              if (response && response.log) msg += "\nLog: " + response.log;
+              alert(msg);
+            }
+            btn.disabled = false;
+            btn.textContent = "Save Machine Setup";
+          })
+          .withFailureHandler(function (err) {
+            alert("Transport Error: " + err.message);
+            console.error("Transport Failure:", err);
+            btn.disabled = false;
+            btn.textContent = "Save Machine Setup";
+          })
+          .saveMachineSetup(payloadString);
+
+      } catch (e) {
+        alert("Client-Side Serialization Error: " + e.message);
+        console.error("Serialization Error:", e);
+        btn.disabled = false;
+        btn.textContent = "Save Machine Setup";
+      }
     }
 
     // --- MODULE CONFIGURATOR LOGIC (EXISTING) ---
@@ -801,50 +1057,50 @@
     function populateModuleDropdown(modules) {
       var select = document.getElementById("moduleSelect");
       select.innerHTML = '<option value="" disabled selected>Select a Module...</option>';
-      modules.forEach(function(m) {
+      modules.forEach(function (m) {
         var opt = document.createElement("option");
         opt.value = m.id;
         opt.text = m.id + " | " + m.desc;
         select.appendChild(opt);
       });
     }
-    
+
     // Render Radio Buttons for Layout
     function renderLayoutSettings(data) {
       if (!data) return;
-      
+
       // Helper to build radio buttons
       function buildRadioGroup(containerId, items, groupName) {
         var container = document.getElementById(containerId);
         container.innerHTML = "";
-        
+
         // Add "None" option first
         var noneHtml = '<label class="radio-item"><input type="radio" name="' + groupName + '" value="-1" checked> None</label>';
         container.innerHTML += noneHtml;
-        
-        items.forEach(function(item) {
-           var html = '<label class="radio-item">';
-           html += '<input type="radio" name="' + groupName + '" value="' + item.colIndex + '">';
-           html += item.label; // Dynamic Label from Row 6
-           html += '</label>';
-           container.innerHTML += html;
+
+        items.forEach(function (item) {
+          var html = '<label class="radio-item">';
+          html += '<input type="radio" name="' + groupName + '" value="' + item.colIndex + '">';
+          html += item.label; // Dynamic Label from Row 6
+          html += '</label>';
+          container.innerHTML += html;
         });
       }
-      
+
       if (data.group1) {
-          document.getElementById("vcmTitle").textContent = data.group1.title;
-          buildRadioGroup("vcmContainer", data.group1.options, "vcmGroup");
+        document.getElementById("vcmTitle").textContent = data.group1.title;
+        buildRadioGroup("vcmContainer", data.group1.options, "vcmGroup");
       }
-      
+
       if (data.group2) {
-          document.getElementById("valveTitle").textContent = data.group2.title;
-          buildRadioGroup("valveContainer", data.group2.options, "valveGroup");
+        document.getElementById("valveTitle").textContent = data.group2.title;
+        buildRadioGroup("valveContainer", data.group2.options, "valveGroup");
       }
     }
 
     function loadModuleData() {
       var moduleID = document.getElementById("moduleSelect").value;
-      if(!moduleID) return;
+      if (!moduleID) return;
 
       document.getElementById("loading").classList.remove("hidden");
       document.getElementById("loadingText").textContent = "Processing Dependencies...";
@@ -858,7 +1114,7 @@
 
       document.getElementById("loading").classList.add("hidden");
       document.getElementById("configContainer").classList.remove("hidden");
-      
+
       console.log("Config Data:", data);
 
       // 1. Electrical
@@ -872,32 +1128,32 @@
       // 2. Tooling
       var toolList = document.getElementById("toolList");
       toolList.innerHTML = "";
-      
+
       if (data.tools && data.tools.length > 0) {
-        data.tools.forEach(function(tool) {
+        data.tools.forEach(function (tool) {
           var li = document.createElement("li");
           li.className = "tool-item";
-          
+
           var html = '<span class="part-id">' + tool.id + '</span>';
           html += '<span class="part-desc">' + tool.desc + '</span>';
-          
+
           if (tool.standardOptions && tool.standardOptions.length > 0) {
-             html += '<select id="opt_' + tool.id + '" style="margin-top:4px;">';
-             html += '<option value="" disabled selected>Select Option...</option>';
-             html += buildCategorizedOptions(tool.standardOptions);
-             html += '</select>';
+            html += '<select id="opt_' + tool.id + '" style="margin-top:4px;">';
+            html += '<option value="" disabled selected>Select Option...</option>';
+            html += buildCategorizedOptions(tool.standardOptions);
+            html += '</select>';
           }
-          
+
           if (tool.requiresRubberTip) {
             html += '<span class="alert-label">⚠ SELECTION REQUIRED:</span>';
             html += '<select id="tip_' + tool.id + '" class="required-select">';
             html += '<option value="" disabled selected>Select Rubber Tip...</option>';
             if (tool.rubberTipOptions) {
-               html += buildCategorizedOptions(tool.rubberTipOptions);
+              html += buildCategorizedOptions(tool.rubberTipOptions);
             }
             html += '</select>';
           }
-          
+
           li.innerHTML = html;
           toolList.appendChild(li);
         });
@@ -908,31 +1164,31 @@
       // 3. Vision
       var visionCard = document.getElementById("visionCard");
       var visionSelect = document.getElementById("visionSelect");
-      
+
       if (data.vision.type === 'select') {
         visionCard.classList.remove("hidden");
         visionSelect.innerHTML = '<option value="" disabled selected>Select Vision...</option>';
-        data.vision.options.forEach(function(opt){
-           var o = document.createElement("option");
-           o.value = opt.id;
-           o.text = opt.id + " - " + opt.desc;
-           visionSelect.appendChild(o);
+        data.vision.options.forEach(function (opt) {
+          var o = document.createElement("option");
+          o.value = opt.id;
+          o.text = opt.id + " - " + opt.desc;
+          visionSelect.appendChild(o);
         });
       } else if (data.vision.type === 'fixed') {
-         visionCard.classList.remove("hidden");
-         var fixedOpt = data.vision.options[0];
-         visionSelect.innerHTML = '<option value="' + fixedOpt.id + '" selected disabled>' + fixedOpt.id + ' (' + fixedOpt.desc + ')</option>';
+        visionCard.classList.remove("hidden");
+        var fixedOpt = data.vision.options[0];
+        visionSelect.innerHTML = '<option value="' + fixedOpt.id + '" selected disabled>' + fixedOpt.id + ' (' + fixedOpt.desc + ')</option>';
       } else {
         visionCard.classList.add("hidden");
-        visionSelect.innerHTML = ""; 
+        visionSelect.innerHTML = "";
       }
-      
+
       // 4. Jigs
       var jigsBox = document.getElementById("jigsBox");
       if (data.jigs && data.jigs.length > 0) {
-         jigsBox.innerHTML = data.jigs.map(j => j.id + " <span style='color:#999'>(" + j.desc + ")</span>").join("<br>");
+        jigsBox.innerHTML = data.jigs.map(j => j.id + " <span style='color:#999'>(" + j.desc + ")</span>").join("<br>");
       } else {
-         jigsBox.textContent = "No Jigs required.";
+        jigsBox.textContent = "No Jigs required.";
       }
 
       // 5. Spare Parts
@@ -940,41 +1196,41 @@
       var spareList = document.getElementById("spareList");
       var spareSelect = document.getElementById("spareSelect");
 
-      spareSelect.value = ""; 
+      spareSelect.value = "";
       spareList.innerHTML = "";
 
       if (data.spareParts && data.spareParts.length > 0) {
         spareCard.classList.remove("hidden");
-        data.spareParts.forEach(function(part) {
-           var li = document.createElement("li");
-           li.className = "tool-item";
-           li.innerHTML = '<span class="part-id">' + part.id + '</span><span class="part-desc">' + part.desc + '</span>';
-           spareList.appendChild(li);
+        data.spareParts.forEach(function (part) {
+          var li = document.createElement("li");
+          li.className = "tool-item";
+          li.innerHTML = '<span class="part-id">' + part.id + '</span><span class="part-desc">' + part.desc + '</span>';
+          spareList.appendChild(li);
         });
       } else {
         spareCard.classList.add("hidden");
       }
-      
+
       document.getElementById("numVisionSelect").value = "1";
     }
-    
+
     function buildCategorizedOptions(optionsArray) {
-       var html = "";
-       var currentCategory = null;
-       var isGroupOpen = false;
-       
-       optionsArray.forEach(function(opt) {
-          if (opt.category !== currentCategory) {
-             if (isGroupOpen) { html += '</optgroup>'; isGroupOpen = false; }
-             if (opt.category) { html += '<optgroup label="' + opt.category + '">'; isGroupOpen = true; }
-             currentCategory = opt.category;
-          }
-          var displayText = opt.id;
-          if(opt.desc) displayText += " | " + opt.desc;
-          html += '<option value="' + opt.id + '">' + displayText + '</option>';
-       });
-       if (isGroupOpen) html += '</optgroup>';
-       return html;
+      var html = "";
+      var currentCategory = null;
+      var isGroupOpen = false;
+
+      optionsArray.forEach(function (opt) {
+        if (opt.category !== currentCategory) {
+          if (isGroupOpen) { html += '</optgroup>'; isGroupOpen = false; }
+          if (opt.category) { html += '<optgroup label="' + opt.category + '">'; isGroupOpen = true; }
+          currentCategory = opt.category;
+        }
+        var displayText = opt.id;
+        if (opt.desc) displayText += " | " + opt.desc;
+        html += '<option value="' + opt.id + '">' + displayText + '</option>';
+      });
+      if (isGroupOpen) html += '</optgroup>';
+      return html;
     }
 
     // --- PHASE 2: DATA COLLECTION & SAVE ---
@@ -983,11 +1239,11 @@
 
       var moduleSelect = document.getElementById("moduleSelect");
       var moduleFullText = moduleSelect.options[moduleSelect.selectedIndex].text;
-      var moduleDescClean = moduleFullText.split(" | ")[1] || ""; 
-      
+      var moduleDescClean = moduleFullText.split(" | ")[1] || "";
+
       // (NEW) Get Quantity
       var numVision = document.getElementById("numVisionSelect").value || "1";
-      
+
       var payload = {
         moduleID: currentConfigData.moduleID,
         moduleDesc: moduleDescClean,
@@ -998,7 +1254,7 @@
         rubberTipID: "",
         sparePartsID: "",
         numberVision: numVision, // NEW for Phase 4.1
-        layoutFlags: {} 
+        layoutFlags: {}
       };
 
       if (currentConfigData.electrical && currentConfigData.electrical.id) {
@@ -1009,7 +1265,7 @@
       if (visionSelect && visionSelect.value) {
         payload.visionID = visionSelect.value;
       } else if (currentConfigData.vision.type === 'fixed' && currentConfigData.vision.options.length > 0) {
-         payload.visionID = currentConfigData.vision.options[0].id;
+        payload.visionID = currentConfigData.vision.options[0].id;
       }
 
       if (currentConfigData.jigs && currentConfigData.jigs.length > 0) {
@@ -1029,26 +1285,26 @@
       // Spare Parts Validation
       var spareCard = document.getElementById("spareCard");
       if (!spareCard.classList.contains("hidden")) {
-         var decision = document.getElementById("spareSelect").value;
-         if (decision === "") {
-            alert("Please decide whether to include Spare Parts (Yes/No).");
-            return null; 
-         } else if (decision === "yes") {
-            var ids = currentConfigData.spareParts.map(function(p){ return p.id; }).join("; ");
-            payload.sparePartsID = ids;
-         } else {
-            payload.sparePartsID = ""; 
-         }
+        var decision = document.getElementById("spareSelect").value;
+        if (decision === "") {
+          alert("Please decide whether to include Spare Parts (Yes/No).");
+          return null;
+        } else if (decision === "yes") {
+          var ids = currentConfigData.spareParts.map(function (p) { return p.id; }).join("; ");
+          payload.sparePartsID = ids;
+        } else {
+          payload.sparePartsID = "";
+        }
       }
-      
+
       // Collect Layout Flags
       var vcmRadio = document.querySelector('input[name="vcmGroup"]:checked');
       if (vcmRadio && vcmRadio.value !== "-1") {
-         payload.layoutFlags[vcmRadio.value] = true;
+        payload.layoutFlags[vcmRadio.value] = true;
       }
       var valveRadio = document.querySelector('input[name="valveGroup"]:checked');
       if (valveRadio && valveRadio.value !== "-1") {
-         payload.layoutFlags[valveRadio.value] = true;
+        payload.layoutFlags[valveRadio.value] = true;
       }
 
       return payload;
@@ -1056,7 +1312,7 @@
 
     function saveConfiguration() {
       var payload = collectPayload();
-      if (!payload) return; 
+      if (!payload) return;
 
       if (!payload.moduleID) {
         alert("Error: No Module Selected.");
@@ -1071,19 +1327,19 @@
       document.getElementById("configContainer").classList.add("hidden");
 
       google.script.run
-        .withSuccessHandler(function(response) {
-           document.getElementById("loading").classList.add("hidden");
-           document.getElementById("configContainer").classList.remove("hidden");
-           btn.disabled = false;
-           btn.textContent = "Save Configuration";
-           alert("Success! Saved to " + response.slot);
+        .withSuccessHandler(function (response) {
+          document.getElementById("loading").classList.add("hidden");
+          document.getElementById("configContainer").classList.remove("hidden");
+          btn.disabled = false;
+          btn.textContent = "Save Configuration";
+          alert("Success! Saved to " + response.slot);
         })
-        .withFailureHandler(function(err) {
-           document.getElementById("loading").classList.add("hidden");
-           document.getElementById("configContainer").classList.remove("hidden");
-           btn.disabled = false;
-           btn.textContent = "Save Configuration";
-           alert("Error: " + err.message);
+        .withFailureHandler(function (err) {
+          document.getElementById("loading").classList.add("hidden");
+          document.getElementById("configContainer").classList.remove("hidden");
+          btn.disabled = false;
+          btn.textContent = "Save Configuration";
+          alert("Error: " + err.message);
         })
         .saveConfiguration(payload);
     }
@@ -1093,4 +1349,5 @@
     }
   </script>
 </body>
+
 </html>
