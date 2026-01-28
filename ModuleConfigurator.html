@@ -309,8 +309,8 @@
 
   <!-- NAVIGATION TABS -->
   <div class="nav-bar">
-    <div id="tabModule" class="nav-btn active" onclick="switchTab('MODULE')">Modules</div>
-    <div id="tabSetup" class="nav-btn" onclick="switchTab('SETUP')">Machine Setup</div>
+    <div id="tabSetup" class="nav-btn active" onclick="switchTab('SETUP')">Machine Setup</div>
+    <div id="tabModule" class="nav-btn" onclick="switchTab('MODULE')">Modules</div>
   </div>
 
   <!-- Loading State -->
@@ -320,7 +320,7 @@
   </div>
 
   <!-- VIEW 1: MODULE CONFIGURATOR -->
-  <div id="viewModule">
+  <div id="viewModule" class="hidden">
     <h3>Module Configurator</h3>
 
     <!-- Step 1: Module Selector -->
@@ -412,7 +412,7 @@
   </div>
 
   <!-- VIEW 2: MACHINE SETUP (NEW PHASE 6) -->
-  <div id="viewSetup" class="hidden">
+  <div id="viewSetup">
     <h3>Machine Setup</h3>
 
     <!-- 1. Vision PC -->
@@ -461,6 +461,12 @@
       // Load Module Data on Start
       google.script.run.withSuccessHandler(populateModuleDropdown).getModuleList();
       google.script.run.withSuccessHandler(renderLayoutSettings).getLayoutHeaders();
+
+      // Load Machine Setup Data Immediately (Default View)
+      loadSetupData();
+      loadBaseModuleData();
+      loadBaseModuleTooling();
+      isSetupLoaded = true;
     };
 
     // --- TAB SWITCHER LOGIC ---

@@ -335,9 +335,19 @@ function processToolingOptions(sourceSS, refSheet) {
     var colH = String(rawData[i][7]).trim(); // Description
     var match = colA.match(/\[(.*?)\]/);
 
-    if (match && match[1]) { currentParentID = match[1]; currentCategory = null; }
+    // 1. Parent Detection (Start Block)
+    if (match && match[1]) {
+      currentParentID = match[1];
+      currentCategory = null;
+    }
+    // 2. Stop Signal: Non-Bracketed Text in Col A (Visual Break)
+    else if (colA !== "" && !match) {
+      currentParentID = null;
+    }
+
     if (colB !== "") { currentCategory = colB; }
 
+    // 4. Processing (Only if valid parent exists)
     if (currentParentID && colF !== "" && colF !== "Part ID") {
       databaseOutput.push([currentParentID, colF, (currentCategory || ""), colH]);
     }
