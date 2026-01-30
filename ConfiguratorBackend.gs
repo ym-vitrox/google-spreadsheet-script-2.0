@@ -814,7 +814,13 @@ function buildMasterDictionary() {
     }
   }
 
-  // 1. Modules
+  // 0. Base Data (Cols A & B) - Includes Vision PCs
+  var baseData = refSheet.getRange(1, 1, lastRow, 2).getValues();
+  for (var z = 0; z < baseData.length; z++) {
+    addToDict(baseData[z][0], baseData[z][1]);
+  }
+
+  // 1. Modules (Cols C & D)
   var moduleData = refSheet.getRange(1, 3, lastRow, 2).getValues();
   for (var i = 0; i < moduleData.length; i++) {
     addToDict(moduleData[i][0], moduleData[i][1]);
@@ -865,7 +871,10 @@ function extractProductionData() {
   var lastRow = sheet.getLastRow();
 
   // Initialize Payload
+  // Initialize Payload
   var payload = {
+    PC: [], // Phase 7c.1
+    CONFIG: [], // Phase 7c (Configurable Base Module -> CONFIG)
     MODULE: [],
     ELECTRICAL: [],
     VISION: [],
@@ -874,8 +883,27 @@ function extractProductionData() {
     SPARES: [],
     VCM: [],
     OTHERS: [],
+    CORE: [], // Phase 7c (External BOM -> CORE)
     rowsToMarkSynced: []
   };
+
+  // --- SECTION 0: VISION PC EXTRACTION (Cell C2) ---
+  try {
+    var visionPCRaw = sheet.getRange(2, 3).getValue(); // C2
+    if (visionPCRaw) {
+      var vId = String(visionPCRaw).trim();
+      if (vId) {
+        payload.PC.push({
+          requiresNumbering: true,
+          id: vId,
+          desc: masterDict[vId] || "Vision PC (Check REF_DATA)",
+          qty: 1
+        });
+      }
+    }
+  } catch (e) {
+    console.warn("Vision PC Extraction Failed: " + e.message);
+  }
 
   // --- SECTION 1: MACHINE SETUP EXTRACTION (Cols C-E) ---
   // Scan between "Base Module Tooling" and "Comment"
@@ -887,48 +915,64 @@ function extractProductionData() {
     var actualDepth = Math.min(SEARCH_DEPTH, lastRow);
     var bigData = sheet.getRange(1, 1, actualDepth, 2).getValues(); // Read A:B
 
-    var startR = -1;
-    var endR = -1;
+    // --- SECTION 1: CONFIGURABLE BASE MODULE EXTRACTION (Cols A-C) ---
+    // Scan between "Configurable Base Module" and "Base Module Tooling"
+    var configStartR = -1;
+    var baseToolingStartR = -1;
+    var commentStartR = -1;
 
     for (var i = 0; i < bigData.length; i++) {
       var rowNum = i + 1;
-      var valA = String(bigData[i][0]).trim();
-      var valB = String(bigData[i][1]).trim();
+      var valA = String(bigData[i][0]).trim().replace(/:$/, "");
+      var valB = String(bigData[i][1]).trim().replace(/:$/, "");
 
-      if (valA === "Base Module Tooling" || valB === "Base Module Tooling") {
-        startR = rowNum;
-      }
+      if (valA === "Configurable Base Module" || valB === "Configurable Base Module") configStartR = rowNum;
+      if (valA === "Base Module Tooling" || valB === "Base Module Tooling") baseToolingStartR = rowNum;
+      if ((/^comments?:?$/i.test(valA) || /^comments?:?$/i.test(valB)) && baseToolingStartR !== -1 && commentStartR === -1) commentStartR = rowNum;
+    }
 
-      if (startR !== -1 && endR === -1) {
-        if (/^comments?:?$/i.test(valA) || /^comments?:?$/i.test(valB)) {
-          endR = rowNum;
+    // A. EXTRACT CONFIGURABLE BASE MODULES -> payload.CONFIG
+    if (configStartR !== -1 && baseToolingStartR !== -1 && baseToolingStartR > configStartR + 1) {
+      var configRange = sheet.getRange(configStartR + 1, 3, baseToolingStartR - configStartR - 1, 1).getValues(); // Col C only
+      for (var c = 0; c < configRange.length; c++) {
+        var cId = String(configRange[c][0]).trim();
+        if (cId) {
+          payload.CONFIG.push({
+            requiresNumbering: true,
+            id: cId,
+            desc: masterDict[cId] || "Base Module (Check REF_DATA)",
+            qty: 1
+          });
         }
       }
     }
 
-    if (startR !== -1 && endR !== -1) {
-      // Data is between startR and endR
-      if (endR > startR + 1) {
-        var setupRange = sheet.getRange(startR + 1, 3, endR - startR - 1, 3).getValues(); // C, D, E
+    // B. EXTRACT BASE MODULE TOOLING -> payload.TOOLING
+    if (baseToolingStartR !== -1 && commentStartR !== -1 && commentStartR > baseToolingStartR + 1) {
+      var setupRange = sheet.getRange(baseToolingStartR + 1, 3, commentStartR - baseToolingStartR - 1, 3).getValues(); // C, D, E
+      var isNewGroup = true; // Default true so orphans get numbered
 
-        for (var m = 0; m < setupRange.length; m++) {
-          var rowData = setupRange[m];
-          var idC = String(rowData[0]).trim(); // Parent (Level 1)
-          var idD = String(rowData[1]).trim(); // Child (Level 2)
-          var descE = String(rowData[2]).trim(); // Description in E
+      for (var m = 0; m < setupRange.length; m++) {
+        var rowData = setupRange[m];
+        var idC = String(rowData[0]).trim(); // Parent (Group Header)
+        var idD = String(rowData[1]).trim(); // Child (Option)
+        var descE = String(rowData[2]).trim(); // Description in E
 
-          var validID = "";
-          if (idC) validID = idC;
-          else if (idD) validID = idD;
+        // Signal new group if Parent ID is present
+        if (idC !== "") {
+          isNewGroup = true;
+        }
 
-          if (validID) {
-            payload.TOOLING.push({
-              requiresNumbering: true,
-              id: validID,
-              desc: descE || masterDict[validID] || "Manual Entry",
-              qty: 1
-            });
-          }
+        // Logic: Only take Valid Options (Col D)
+        if (idD) {
+          payload.TOOLING.push({
+            requiresNumbering: isNewGroup,
+            id: idD,
+            desc: descE || masterDict[idD] || "Tooling Option",
+            qty: 1
+          });
+          // Consume the numbering flag for this group
+          if (isNewGroup) isNewGroup = false;
         }
       }
     }
@@ -936,114 +980,182 @@ function extractProductionData() {
     console.warn("Machine Setup Extraction Failed: " + e.message);
   }
 
+  // --- SECTION 1.5: EXTERNAL CORE EXTRACTION (BOM Tree) ---
+  try {
+    var coreItems = fetchCoreItemsFromExternal();
+    if (coreItems && coreItems.length > 0) {
+      payload.CORE = coreItems;
+    }
+  } catch (e) {
+    console.warn("CORE Extraction Failed: " + e.message);
+  }
+
+
+
   // --- SECTION 2: MODULE CONFIGURATION EXTRACTION (B-Slots) ---
-  // Dynamic Header Reading
+  // Dynamic Header Reading Strategy
   var vcmFinder = sheet.getRange("B:B").createTextFinder("VCM").matchEntireCell(true).findNext();
   if (!vcmFinder) throw new Error("Critical Error: 'VCM' anchor not found. Cannot extract configuration.");
 
   var vcmRowIndex = vcmFinder.getRow();
 
-  // Read the Header Row (e.g., "Voice Coil (Direct)...") which is at vcmRowIndex
-  // B:F (Cols 2-6)
-  var headerData = sheet.getRange(vcmRowIndex, 2, 1, 5).getValues()[0];
-  var headerRow = [null, headerData[0], headerData[1], headerData[2], headerData[3], headerData[4]];
+  // 1. Detect Header Structure (Dynamic Merge Scanning)
+  // We scan columns starting from B (Col 2)
+  // Logic: Current Header -> Detect Merge -> Get Range -> Next Header -> Repeat
+  var columnMap = {}; // Key: ColIndex (1-based), Value: Category (e.g., "VCM")
+  var colCursor = 2; // Start at B
+  var MAX_SCAN_COL = 10; // Failsafe limit (Scanning B->K should be enough)
 
-  // Data Range: From VCM Row + 2 downwards
-  var startDataRow = vcmRowIndex + 2;
-  var rawData = sheet.getRange(startDataRow, 1, lastRow - startDataRow + 1, 18).getValues();
+  // We expect "VCM" at Col 2. Let's see how wide it is.
+  while (colCursor <= MAX_SCAN_COL) {
+    var cell = sheet.getRange(vcmRowIndex, colCursor);
+    var headerVal = String(cell.getValue()).trim();
 
-  var startScanning = false;
-
-  for (var i = 0; i < rawData.length; i++) {
-    var row = rawData[i];
-    var turretName = String(row[6]).trim(); // Col G
-    var syncStatus = String(row[9]).trim(); // Col J
-    var moduleID = String(row[10]).trim();  // Col K
-
-    // Dynamic start check for B10+
-    if (!startScanning && turretName.startsWith("B") && !isNaN(parseInt(turretName.substring(1)))) {
-      startScanning = true;
-    }
-
-    if (turretName === "B33" || (turretName.startsWith("B") && parseInt(turretName.substring(1)) > 32)) {
+    if (headerVal === "") {
+      // If we hit an empty header, we stop scanning headers
       break;
     }
 
-    if (startScanning) {
-      if (moduleID === "") continue;
-      if (syncStatus === "SYNCED") continue;
+    var startCol = colCursor;
+    var endCol = colCursor;
 
-      payload.rowsToMarkSynced.push({ row: startDataRow + i }); // Use absolute row
+    if (cell.isPartOfMerge()) {
+      // If merged, find the bounds
+      var range = cell.getMergedRanges()[0];
+      // Note: getMergedRanges returns the merge compatible with the cell
+      startCol = range.getColumn();
+      endCol = range.getLastColumn();
+    }
 
-      var globalQty = parseInt(row[8]);
-      if (isNaN(globalQty) || globalQty < 1) globalQty = 1;
+    // Map these columns to the found header value
+    // NOTE: If header is "Valve Set", we might want to map it to "VCM" or "OTHERS" depending on legacy logic?
+    // Using EXACT header value for now, will map during Push
+    for (var c = startCol; c <= endCol; c++) {
+      columnMap[c] = headerVal;
+    }
 
-      function pushItem(category, id, descOverride, isPrimary) {
-        if (!id || id === "") return;
-        var cleanId = id.trim();
-        var finalDesc = descOverride || masterDict[cleanId] || "Check REF_DATA";
+    // Move cursor to next block
+    colCursor = endCol + 1;
+  }
 
-        payload[category].push({
-          requiresNumbering: isPrimary, // Boolean flag instead of number
-          id: cleanId,
-          desc: finalDesc,
-          qty: globalQty
-        });
+  // 2. Read Option Row (Immediately below Header)
+  // We need to know what "Option" corresponds to each column (e.g., "Standard", "High Force", ID...)
+  var optionRowIndex = vcmRowIndex + 1;
+  var optionData = sheet.getRange(optionRowIndex, 1, 1, colCursor).getValues()[0]; // Read A..EndCol
+
+  // 3. Scan Data (Strict B10 - B32 Range)
+  // Find B10 Row first to start scanning
+  var bSlotFinder = sheet.getRange("G:G").createTextFinder("B10").matchEntireCell(true).findNext();
+  if (!bSlotFinder) {
+    // Fallback: Just start searching below header if B10 explicitly missing?
+    // No, strictly enforcing B10 per user request.
+    console.warn("B10 Start Anchor not found. Configuring Module Extraction skipped.");
+    return payload;
+  }
+
+  var startDataRow = bSlotFinder.getRow();
+
+  // Read Data Block (From B10 downwards, plenty of rows)
+  // We need to read Columns A through K (Col 11) or further if headers go further
+  var maxDataCol = Math.max(18, colCursor);
+  var rawData = sheet.getRange(startDataRow, 1, lastRow - startDataRow + 1, maxDataCol).getValues();
+
+  for (var i = 0; i < rawData.length; i++) {
+    var row = rawData[i];
+    var turretName = String(row[6]).trim(); // Col G (Index 6)
+    var syncStatus = String(row[9]).trim(); // Col J (Index 9)
+    var moduleID = String(row[10]).trim();  // Col K (Index 10)
+
+    // STOP CONDITION: B33 or higher / End of List
+    if (turretName === "B33") break;
+    if (turretName.startsWith("B")) {
+      var num = parseInt(turretName.substring(1));
+      if (!isNaN(num) && num > 32) break;
+    }
+
+    // SKIP CONDITION: Not a B-Slot (e.g. empty row or garbage)
+    if (!turretName.startsWith("B")) continue;
+
+    // SKIP CONDITION: Already Synced
+    if (syncStatus === "SYNCED") continue;
+
+    // STRICT SKIP CONDITION: Empty Module ID (Crucial Fix)
+    // If no Module is assigned, we do NOT process this row, even if flags are checked.
+    if (moduleID === "") continue;
+
+    // VALID DATA FOUND -> PROCESS
+    payload.rowsToMarkSynced.push({ row: startDataRow + i }); // Absolute Row
+
+    var globalQty = parseInt(row[8]); // Col I
+    if (isNaN(globalQty) || globalQty < 1) globalQty = 1;
+
+    // Helper Push Function
+    function pushItem(category, id, descOverride, isPrimary) {
+      if (!id || id === "") return;
+      var cleanId = id.trim();
+      var finalDesc = descOverride || masterDict[cleanId] || "Check REF_DATA";
+
+      payload[category].push({
+        requiresNumbering: isPrimary,
+        id: cleanId,
+        desc: finalDesc,
+        qty: globalQty
+      });
+    }
+
+    // 1. Core Module (Col K)
+    pushItem("MODULE", moduleID, String(row[7]), true); // Col H Desc
+
+    // 2. Fixed Columns (Electrical L, Vision M, etc.) -> Indices 11, 12...
+    pushItem("ELECTRICAL", String(row[11]), null, true);
+    pushItem("VISION", String(row[12]), null, true);
+    pushItem("TOOLING", String(row[13]), null, true);
+    pushItem("TOOLING", String(row[14]), null, false);
+    pushItem("JIG", String(row[15]), null, true);
+
+    // Spares (Col 16)
+    var sparesRaw = String(row[16]);
+    if (sparesRaw) {
+      var spareIds = sparesRaw.split(";");
+      for (var s = 0; s < spareIds.length; s++) {
+        pushItem("SPARES", spareIds[s].trim(), null, (s === 0));
       }
+    }
 
-      pushItem("MODULE", moduleID, String(row[7]), true);
-      pushItem("ELECTRICAL", String(row[11]), null, true);
-      pushItem("VISION", String(row[12]), null, true);
+    // 3. DYNAMIC COLUMNS (The Checkboxes)
+    // Iterate through our mapped columns (from 'columnMap')
+    // We check row[c-1] because row array is 0-indexed, columnMap is 1-based
+    for (var c in columnMap) {
+      var colIdx = parseInt(c); // 1-based index
+      var isChecked = row[colIdx - 1]; // 0-based index
 
-      // Tooling - Standard extraction from Cols M & N
-      pushItem("TOOLING", String(row[13]), null, true);
-      pushItem("TOOLING", String(row[14]), null, false);
+      if (isChecked === true) {
+        var headerCategory = columnMap[colIdx];
+        var optionValue = String(optionData[colIdx - 1]).trim(); // From Option Row
 
-      pushItem("JIG", String(row[15]), null, true);
+        // Parse ID/Desc from Option Cell (e.g. "430001-A689" or "Standard")
+        // Attempt to extract ID if present
+        var parsedID = "";
+        var parsedDesc = "";
 
-      // Spares
-      var sparesRaw = String(row[16]);
-      if (sparesRaw) {
-        var spareIds = sparesRaw.split(";");
-        for (var s = 0; s < spareIds.length; s++) {
-          var sId = spareIds[s].trim();
-          pushItem("SPARES", sId, null, (s === 0)); // Only first is primary
-        }
-      }
-
-      function parseHeaderData(headerText) {
-        var match = headerText.match(/(\d{4,}-\w+)/);
+        var match = optionValue.match(/(\d{4,}-\w+)/);
         if (match) {
-          var id = match[0];
-          var desc = headerText.replace(id, "").trim();
-          return { id: id, desc: desc };
+          parsedID = match[0];
+          parsedDesc = optionValue.replace(parsedID, "").trim();
+        } else {
+          parsedID = optionValue;
         }
-        return { id: "", desc: "" };
-      }
 
-      // VCM (Indices shifted because row array is 0-indexed)
-      // row[1] = Col B
-      if (row[1] === true) {
-        var d = parseHeaderData(headerRow[1]);
-        pushItem("VCM", d.id, d.desc, true);
-      }
-      if (row[2] === true) {
-        var d = parseHeaderData(headerRow[2]);
-        pushItem("VCM", d.id, d.desc, true);
-      }
+        // MAP HEADERS TO PAYLOAD SECTIONS
+        var targetSection = "OTHERS"; // Default catch-all
 
-      // OTHERS
-      if (row[3] === true) {
-        var d = parseHeaderData(headerRow[3]);
-        pushItem("OTHERS", d.id, d.desc, true);
-      }
-      if (row[4] === true) {
-        var d = parseHeaderData(headerRow[4]);
-        pushItem("OTHERS", d.id, d.desc, true);
-      }
-      if (row[5] === true) {
-        var d = parseHeaderData(headerRow[5]);
-        pushItem("OTHERS", d.id, d.desc, true);
+        // Explicit Mappings
+        if (headerCategory.toUpperCase().includes("VCM")) targetSection = "VCM";
+
+        // FIXED: Valve Set now maps to OTHERS per user request
+        if (headerCategory.toUpperCase().includes("VALVE")) targetSection = "OTHERS";
+
+        pushItem(targetSection, parsedID, parsedDesc, true);
       }
     }
   }
@@ -1062,6 +1174,9 @@ function injectProductionData(payload) {
   var itemsAdded = 0;
 
   var sections = [
+    { key: "PC", header: "PC" }, // Phase 7c.1
+    { key: "CONFIG", header: "CONFIG" }, // Phase 7c.2
+    { key: "CORE", header: "CORE" }, // Phase 7c.2
     { key: "MODULE", header: "MODULE" },
     { key: "ELECTRICAL", header: "ELECTRICAL" },
     { key: "VISION", header: "VISION" },
@@ -1076,7 +1191,8 @@ function injectProductionData(payload) {
     var sec = sections[i];
     var items = payload[sec.key];
     if (items && items.length > 0) {
-      itemsAdded += insertRowsIntoSection(sheet, sec.header, items);
+      // Pass the entire section object 'sec' as options
+      itemsAdded += insertRowsIntoSection(sheet, sec.header, items, sec);
     }
   }
 
@@ -1086,7 +1202,7 @@ function injectProductionData(payload) {
 /**
  * D. The Smart Fill Helper
  */
-function insertRowsIntoSection(sheet, sectionHeader, items) {
+function insertRowsIntoSection(sheet, sectionHeader, items, options) {
   var lastRow = sheet.getLastRow();
   var rangeValues = sheet.getRange("A1:D" + lastRow).getValues();
 
@@ -1148,6 +1264,42 @@ function insertRowsIntoSection(sheet, sectionHeader, items) {
 
   if (writeCursorIndex === -1) {
     writeCursorIndex = anchorRowIndex;
+  }
+
+  if (writeCursorIndex === -1) {
+    writeCursorIndex = anchorRowIndex;
+  }
+
+  // --- ADDITIVE LOGIC (Phase 7c): Scan for Duplicates & Mark Remarks ---
+  if (writeCursorIndex > startRowIndex + 1) {
+    var existingDataRange = sheet.getRange(startRowIndex + 2, 4, writeCursorIndex - (startRowIndex + 1), 4).getValues(); // Cols D, E, F, G
+
+    // Create a Map of Existing Unreleased Items
+    // Key: PartID, Value: Array of Row Indices (Relative to startRowIndex + 2)
+    var unreleasedMap = {};
+
+    for (var e = 0; e < existingDataRange.length; e++) {
+      var eID = String(existingDataRange[e][0]).trim(); // Col D
+      var isReleased = existingDataRange[e][3] === true; // Col G
+
+      if (eID && !isReleased) {
+        if (!unreleasedMap[eID]) unreleasedMap[eID] = [];
+        unreleasedMap[eID].push(e);
+      }
+    }
+
+    // Check Payload Items against Map
+    for (var n = 0; n < items.length; n++) {
+      var newID = items[n].id;
+      if (unreleasedMap[newID]) {
+        // Found unreleased duplicates! Mark them.
+        var indices = unreleasedMap[newID];
+        for (var k = 0; k < indices.length; k++) {
+          var rowToMark = (startRowIndex + 2) + indices[k];
+          sheet.getRange(rowToMark, 10).setValue("haven't release, please take note"); // Col J
+        }
+      }
+    }
   }
 
   // 4. Calculate Capacity & Deficit
@@ -1231,4 +1383,40 @@ function initializeReleaseColumns() {
   sheet.getRange(7, 9, lastRow - 6, 1).setDataValidation(rule);
 
   SpreadsheetApp.getUi().alert("Columns Initialized.");
+}
+
+// =========================================
+// EXTERNAL DATA HELPERS
+// =========================================
+function fetchCoreItemsFromExternal() {
+  var externalID = "1nTSOqK4nGRkUEHGFnUF30gRCGFQMo6I2l8vhZB-NkSA";
+  var ss = SpreadsheetApp.openById(externalID);
+  var sheet = ss.getSheetByName("BOM Structure Tree Diagram");
+  if (!sheet) return [];
+
+  var finder = sheet.getRange("C:D").createTextFinder("CORE :430000-A557").matchEntireCell(false).findNext();
+  if (!finder) return [];
+
+  var startRow = finder.getRow() + 1;
+  var lastRow = sheet.getLastRow();
+
+  // Read C (ID) and D (Desc)
+  var range = sheet.getRange(startRow, 3, lastRow - startRow + 1, 2).getValues();
+  var coreItems = [];
+
+  for (var i = 0; i < range.length; i++) {
+    var id = String(range[i][0]).trim();
+    var desc = String(range[i][1]).trim();
+
+    // Stop at empty row
+    if (id === "") break;
+
+    coreItems.push({
+      requiresNumbering: true,
+      id: id,
+      desc: desc,
+      qty: 1
+    });
+  }
+  return coreItems;
 }

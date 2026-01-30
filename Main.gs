@@ -193,9 +193,18 @@ function runProductionSync() {
     // 1. Extract Data
     var payload = extractProductionData();
 
-    // 2. Validation
-    if (payload.rowsToMarkSynced.length === 0) {
-      ui.alert("No New Data", "All rows in the Trial Layout are already marked as SYNCED.", ui.ButtonSet.OK);
+    // 2. Validation (Gatekeeper Fix Phase 7c)
+    // Runs if ANY relevant payload section has data
+    var hasData = (
+      payload.rowsToMarkSynced.length > 0 ||
+      payload.PC.length > 0 ||
+      payload.CONFIG.length > 0 ||
+      payload.TOOLING.length > 0 ||
+      payload.CORE.length > 0
+    );
+
+    if (!hasData) {
+      ui.alert("No New Data", "No new configurations or machine setup data found to sync.", ui.ButtonSet.OK);
       return;
     }
 
