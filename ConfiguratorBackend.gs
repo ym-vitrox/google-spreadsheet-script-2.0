@@ -1309,7 +1309,51 @@ function insertRowsIntoSection(sheet, sectionHeader, items, options) {
 
   // 5. Expand if necessary
   if (deficit > 0) {
-    sheet.insertRowsBefore(anchorRowIndex + 1, deficit);
+    // Determine Insertion Point
+    var insertRowStart = anchorRowIndex + 1;
+    sheet.insertRowsBefore(insertRowStart, deficit);
+
+    // --- FIX 1: Set Background to White (Remove Grey) ---
+    // We target the entire row(s) we just added (Cols 1 to Last)
+    sheet.getRange(insertRowStart, 1, deficit, sheet.getLastColumn()).setBackground("white");
+
+    // --- FIX 2: Extend Merges for Cols A & B (SMART MERGE LOGIC) ---
+    // Safely handles cases where "Row Above" is already part of a multi-row merge.
+
+    if (insertRowStart > 1) {
+      try {
+        var rowAbove = insertRowStart - 1;
+        var lastNewRow = insertRowStart + deficit - 1;
+
+        // Helper Logic for Extending Merge
+        var extendMergeForColumn = function (colIndex) {
+          var cellAbove = sheet.getRange(rowAbove, colIndex);
+          var startMergeRow = rowAbove;
+
+          // Check if "Row Above" is already merged
+          if (cellAbove.isPartOfMerge()) {
+            // Get the TOP of the existing block
+            var existingRange = cellAbove.getMergedRanges()[0];
+            startMergeRow = existingRange.getRow();
+          }
+
+          // Define the NEW total range (From Top of Block to Bottom of New Rows)
+          var totalRows = lastNewRow - startMergeRow + 1;
+
+          // Apply Merge (Force Re-merge over the expanded area)
+          var targetRange = sheet.getRange(startMergeRow, colIndex, totalRows, 1);
+          targetRange.merge();
+          targetRange.setVerticalAlignment("middle");
+        };
+
+        // Execute for Column A (1) and Column B (2)
+        extendMergeForColumn(1);
+        extendMergeForColumn(2);
+
+      } catch (e) {
+        console.warn("Smart Merge Extension warning: " + e.message);
+      }
+    }
   }
 
   // 6. Write Data
