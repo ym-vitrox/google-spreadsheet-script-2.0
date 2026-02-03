@@ -310,7 +310,7 @@ function getModuleDetails(moduleID) {
 
   if (!rowData) return { error: "Module ID not found." };
 
-  // --- ELECTRICAL ---
+  // --- ELECTRICAL (ROTATIONAL LOGIC) ---
   var elecResult = null;
   var elecIdsStr = rowData[20];
   var elecDescStr = rowData[21];
@@ -320,11 +320,33 @@ function getModuleDetails(moduleID) {
     var eDescs = String(elecDescStr).split(';').map(function (s) { return s.trim(); });
 
     if (eIds.length > 0) {
-      elecResult = {
-        id: eIds[0],
-        desc: eDescs[0] || "",
-        note: "Instance 1 (Rotation A)"
-      };
+      // 1. Scan used parts
+      var usedPartsSet = scanUsedElectrical(moduleID);
+
+      // 2. Find Gap (First Available)
+      var assignedIndex = -1;
+      for (var e = 0; e < eIds.length; e++) {
+        if (!usedPartsSet.has(eIds[e])) {
+          assignedIndex = e;
+          break;
+        }
+      }
+
+      if (assignedIndex !== -1) {
+        // OPEN SLOT FOUND
+        elecResult = {
+          status: "OPEN",
+          id: eIds[assignedIndex],
+          desc: eDescs[assignedIndex] || "",
+          note: "Instance " + (assignedIndex + 1) + " of " + eIds.length
+        };
+      } else {
+        // LIMIT REACHED
+        elecResult = {
+          status: "FULL",
+          max: eIds.length
+        };
+      }
     }
   }
 
@@ -425,6 +447,38 @@ function getModuleDetails(moduleID) {
     vision: visionResult,
     spareParts: sparePartsResult
   };
+}
+
+
+function scanUsedElectrical(moduleID) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
+  if (!sheet) return new Set();
+
+  // Find B10 Anchor to start scanning safely
+  var bSlotFinder = sheet.getRange("G:G").createTextFinder("B10").matchEntireCell(true).findNext();
+  if (!bSlotFinder) return new Set();
+
+  var startRow = bSlotFinder.getRow();
+  var lastRow = sheet.getLastRow();
+  var rowsToScan = lastRow - startRow + 1;
+
+  if (rowsToScan < 1) return new Set();
+
+  // Read Columns K (Module ID) and L (Electrical ID)
+  // K is col 11, L is col 12
+  var data = sheet.getRange(startRow, 11, rowsToScan, 2).getValues();
+  var usedSet = new Set();
+
+  for (var i = 0; i < data.length; i++) {
+    var rowModID = String(data[i][0]).trim();
+    var rowElecID = String(data[i][1]).trim();
+
+    if (rowModID === moduleID && rowElecID !== "") {
+      usedSet.add(rowElecID);
+    }
+  }
+  return usedSet;
 }
 
 function fetchOptionsForTool(menuData, parentID) {
@@ -824,6 +878,16 @@ function buildMasterDictionary() {
   var moduleData = refSheet.getRange(1, 3, lastRow, 2).getValues();
   for (var i = 0; i < moduleData.length; i++) {
     addToDict(moduleData[i][0], moduleData[i][1]);
+  }
+
+  // 1.5. Configurable Base Modules & Shopping Lists (Cols I & J)
+  var configData = refSheet.getRange(1, 9, lastRow, 2).getValues();
+  for (var c = 0; c < configData.length; c++) {
+    var cId = String(configData[c][0]).trim();
+    var cDesc = String(configData[c][1]).trim();
+    if (cId && cId !== "Part ID" && cId.indexOf("---") === -1 && !cId.startsWith("LIST-")) {
+      addToDict(cId, cDesc);
+    }
   }
 
   // 2. Tooling Menu

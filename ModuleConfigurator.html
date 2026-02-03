@@ -1124,9 +1124,38 @@
       console.log("Config Data:", data);
 
       // 1. Electrical
+      // 1. Electrical (Rotational & Status Logic)
       var elecBox = document.getElementById("elecBox");
+      var btnSave = document.getElementById("btnSave");
+
+      // Reset State
+      elecBox.style.color = "#2c3e50";
+      elecBox.style.borderColor = "#bdc3c7";
+      elecBox.style.backgroundColor = "#ecf0f1";
+      btnSave.disabled = false;
+      btnSave.textContent = "Save Module Config";
+
       if (data.electrical) {
-        elecBox.textContent = data.electrical.id + " (" + data.electrical.desc + ")";
+        if (data.electrical.status === "FULL") {
+          // STOP! LIMIT REACHED
+          elecBox.innerHTML = "⚠️ <b>ALL ASSIGNED (Limit Reached)</b><br>Max " + data.electrical.max + " instances allowed.";
+          elecBox.style.color = "#c0392b";
+          elecBox.style.backgroundColor = "#fadbd8";
+          elecBox.style.borderColor = "#c0392b";
+
+          btnSave.disabled = true;
+          btnSave.textContent = "Limit Reached";
+        } else if (data.electrical.status === "OPEN") {
+          // NORMAL ASSIGNMENT
+          var info = "<b>" + data.electrical.id + "</b> (" + data.electrical.desc + ")";
+          if (data.electrical.note) {
+            info += "<br><span style='font-size:10px; color:#2980b9;'>" + data.electrical.note + "</span>";
+          }
+          elecBox.innerHTML = info;
+        } else {
+          // Legacy Fallback (just in case)
+          elecBox.textContent = data.electrical.id + " (" + data.electrical.desc + ")";
+        }
       } else {
         elecBox.textContent = "No Electrical Kit required.";
       }
@@ -1339,6 +1368,9 @@
           btn.disabled = false;
           btn.textContent = "Save Configuration";
           alert("Success! Saved to " + response.slot);
+
+          // AUTO-REFRESH: Reload Module Data to update Rotational Logic (Instance Count)
+          loadModuleData();
         })
         .withFailureHandler(function (err) {
           document.getElementById("loading").classList.add("hidden");
