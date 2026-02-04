@@ -716,6 +716,9 @@
             select.className = "tool-opt-select";
             select.innerHTML = '<option value="" disabled selected>Select Option...</option>';
             select.innerHTML += buildCategorizedOptions(tool.options);
+            if (tool.id === "430001-A688") {
+              select.innerHTML += '<option value="EXCLUDE_TOOLING">excluded this tooling</option>';
+            }
             div.appendChild(select);
           } else {
             var info = document.createElement("div");
@@ -998,7 +1001,10 @@
           // Standard Logic
           var select = row.querySelector("select.tool-opt-select");
           if (select) {
-            if (select.value) {
+            if (select.value === 'EXCLUDE_TOOLING') {
+              // User explicitly excluded this tool. Do not add to payload. 
+              // Do not mark as missing.
+            } else if (select.value) {
               toolObj.structure.push({ type: "option", id: select.value, desc: getSelectedText(select) });
               payload.baseTooling.push(toolObj);
             } else {
