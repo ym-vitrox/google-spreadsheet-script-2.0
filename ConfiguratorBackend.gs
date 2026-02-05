@@ -1603,25 +1603,6 @@ function clearAllBatches() {
       var insertPoint = anchorRowIndex;
 
       sheet.insertRowsBefore(insertPoint, needed);
-
-      // Update our local memory of the sheet size for next iterations? 
-      // Actually, insertRows pushes everything down. 
-      // The simplest way is to fetch fresh LastRow/Data for next loop, OR maintain offset.
-      // Given specific section order, subsequent sections are pushed down.
-      // To avoid complexity, we can RE-READ/Update colAValues or offsets. 
-      // Since specific sections are sequential, using an offset accumulator is safer/faster than N reads.
-
-      // Let's do simple offset adjustment:
-      // Insert happened at 'insertPoint'.
-      // Any header found AFTER 'insertPoint' in 'colAValues' needs its index shifted by 'needed'.
-      // But 'colAValues' is static array. We can just shift our future searches? 
-      // Actually, safest way is just `sheet.insertRowsBefore` and accept that we need to handle the shift.
-
-      // FIX: Since we are iterating known 'sections' in order, subsequent searches in `colAValues` will be WRONG unless we update `colAValues` or use `createTextFinder` each time.
-      // BETTER APPROACH: Use `createTextFinder` for each section header fresh. It's slower but robust.
-
-      // RE-IMPLEMENTING LOOPS WITH FRESH SEARCH TO BE SAFE
-      // (Breaking out of the optimized loop above to do it safely per-section)
     }
   }
 
