@@ -1701,25 +1701,23 @@ function repairSectionsRobust(sheet, sections, bufferSize) {
     // Find Header Fresh
     var headerFinder = sheet.getRange("A:A").createTextFinder(header).matchEntireCell(true).findNext();
     if (!headerFinder) {
-      // Try fuzzy match for JIG/CALIBRATION vs JIG if needed, or exact match
       continue;
     }
 
     var headerRow = headerFinder.getRow();
-    var lastSheetRow = sheet.getLastRow();
+
+    // FIX Phase 13: Use MaxRows instead of LastRow
+    // This allows us to "see" the blank buffer rows at the bottom of the sheet (which getLastRow ignores).
+    // This prevents the "infinite append" loop on the last section (SPARES).
+    var lastPhysicalRow = sheet.getMaxRows();
 
     // Find Next Anchor (Scan down from Header)
     // We can't rely on TextFinder for "Next non-empty", we must scan.
-    var maxScan = Math.min(lastSheetRow - headerRow + 50, lastSheetRow); // Limit scan to 50 rows? No, manual data could be large.
-    // Just Read A:A from Header downwards
-    var scanRows = lastSheetRow - headerRow;
+    var scanRows = lastPhysicalRow - headerRow;
+
+    // Case A: Header is at very bottom
     if (scanRows <= 0) {
-      // Header is at very bottom
       sheet.insertRowsAfter(headerRow, bufferSize);
-      // Format new rows
-      var newRange = sheet.getRange(headerRow + 1, 1, bufferSize, sheet.getLastColumn());
-      newRange.setBackground("white");
-      // Add borders/checkboxes?
       setupBlankRows(sheet, headerRow + 1, bufferSize);
       continue;
     }
@@ -1738,13 +1736,26 @@ function repairSectionsRobust(sheet, sections, bufferSize) {
 
     if (!anchorFound) gap = scanRows; // All empty till end
 
+    // STRICT BUFFER LOGIC (Phase 13 Refined)
+    // 1. EXPAND (Gap Too Small)
     if (gap < bufferSize) {
       var needed = bufferSize - gap;
-      var insertAt = headerRow + 1 + gap; // If Gap 0, insert at Header+1
-
+      // Insert at the bottom of the gap (before the anchor)
+      var insertAt = headerRow + 1 + gap;
       sheet.insertRowsBefore(insertAt, needed);
-      setupBlankRows(sheet, insertAt, needed);
     }
+    // 2. SHRINK (Gap Too Large)
+    else if (gap > bufferSize) {
+      var excess = gap - bufferSize;
+      // Delete rows starting after the 5th blank row
+      // Row to start deletion = Header + 1 + Buffer
+      var deleteStart = headerRow + 1 + bufferSize;
+      sheet.deleteRows(deleteStart, excess);
+    }
+
+    // 3. FORCE FORMATTING (Always run on the final 5 rows)
+    // This fixes the "PC" header issue where rows were left unmerged/grey.
+    setupBlankRows(sheet, headerRow + 1, bufferSize);
   }
 }
 
@@ -1760,11 +1771,8 @@ function setupBlankRows(sheet, startRow, count) {
     applySmartMerge(sheet, topRowOfMerge, bottomRowOfMerge);
   }
 
-  // Checkboxes in G
-  sheet.getRange(startRow, 7, count, 1).insertCheckboxes();
-  // Dropdown in I
-  var rule = SpreadsheetApp.newDataValidation().requireValueInList(['CHARGE OUT', 'MRP'], true).build();
-  sheet.getRange(startRow, 9, count, 1).setDataValidation(rule);
+  // NOTE: Checkboxes and Data Validation removed per Phase 13 Clean Restoration requirement.
+  // These rows are now pure visual filler.
 }
 
 /**
