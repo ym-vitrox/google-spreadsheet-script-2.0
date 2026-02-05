@@ -74,6 +74,7 @@ function onOpen() {
     .addItem('Run Synchronization', 'runProductionSync')
     .addSeparator()
     .addItem('Undo Last Sync (Clear Latest Batch)', 'undoLastSync')
+    .addItem('Clear All Batches (Reset All)', 'runClearAllBatches')
     .addToUi();
 }
 
@@ -248,6 +249,27 @@ function undoLastSync() {
       ui.alert("Operations Complete", statusMsg, ui.ButtonSet.OK);
     } catch (e) {
       ui.alert("Error", "Undo Failed: " + e.message, ui.ButtonSet.OK);
+    }
+  }
+}
+
+function runClearAllBatches() {
+  var ui = SpreadsheetApp.getUi();
+  var result = ui.alert(
+    '⚠ Clear All Batches (Nuclear)',
+    'This will PERMANENTLY DELETE ALL rows that were ever synced (rows with a Batch ID).\n\n' +
+    'Manual legacy entries (without Batch IDs) will be preserved.\n' +
+    'The system will also restore 5 blank rows to every section.\n\n' +
+    'Are you sure you want to proceed?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (result == ui.Button.YES) {
+    try {
+      var statusMsg = clearAllBatches(); // Call Backend
+      ui.alert("Reset Complete", statusMsg, ui.ButtonSet.OK);
+    } catch (e) {
+      ui.alert("Error", "Reset Failed: " + e.message, ui.ButtonSet.OK);
     }
   }
 }

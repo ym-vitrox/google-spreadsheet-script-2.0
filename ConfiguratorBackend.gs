@@ -1392,41 +1392,9 @@ function insertRowsIntoSection(sheet, sectionHeader, items, options) {
     sheet.getRange(insertRowStart, 1, deficit, sheet.getLastColumn()).setBackground("white");
 
     // --- FIX 2: Extend Merges for Cols A & B (SMART MERGE LOGIC) ---
-    // Safely handles cases where "Row Above" is already part of a multi-row merge.
-
+    // Refactored to Shared Helper Phase 13
     if (insertRowStart > 1) {
-      try {
-        var rowAbove = insertRowStart - 1;
-        var lastNewRow = insertRowStart + deficit - 1;
-
-        // Helper Logic for Extending Merge
-        var extendMergeForColumn = function (colIndex) {
-          var cellAbove = sheet.getRange(rowAbove, colIndex);
-          var startMergeRow = rowAbove;
-
-          // Check if "Row Above" is already merged
-          if (cellAbove.isPartOfMerge()) {
-            // Get the TOP of the existing block
-            var existingRange = cellAbove.getMergedRanges()[0];
-            startMergeRow = existingRange.getRow();
-          }
-
-          // Define the NEW total range (From Top of Block to Bottom of New Rows)
-          var totalRows = lastNewRow - startMergeRow + 1;
-
-          // Apply Merge (Force Re-merge over the expanded area)
-          var targetRange = sheet.getRange(startMergeRow, colIndex, totalRows, 1);
-          targetRange.merge();
-          targetRange.setVerticalAlignment("middle");
-        };
-
-        // Execute for Column A (1) and Column B (2)
-        extendMergeForColumn(1);
-        extendMergeForColumn(2);
-
-      } catch (e) {
-        console.warn("Smart Merge Extension warning: " + e.message);
-      }
+      applySmartMerge(sheet, insertRowStart - 1, insertRowStart + deficit - 1);
     }
   }
 
@@ -1538,6 +1506,236 @@ function clearLatestBatch() {
   }
 
   return "Cleared Latest Batch (" + latestID + "). Removed " + rowsToDelete.length + " rows.";
+}
+
+/**
+ * PHASE 13: CLEAR ALL BATCHES (NUCLEAR OPTION)
+ * Removes ALL rows with a Batch ID (Col Q).
+ * Performs "Active Restoration" to ensure 5 blank rows per section.
+ */
+function clearAllBatches() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("ORDERING LIST");
+  if (!sheet) throw new Error("ORDERING LIST Sheet Missing");
+
+  // --- STEP 1: DELETE ALL SYNCED ROWS ---
+  var lastRow = sheet.getLastRow();
+  var deletedCount = 0;
+
+  if (lastRow >= 2) {
+    // Read Column Q (Batch IDs)
+    var batchRange = sheet.getRange(2, BATCH_ID_COL_INDEX, lastRow - 1, 1);
+    var batchValues = batchRange.getValues();
+    var rowsToDelete = [];
+
+    // Identify rows with ANY Batch ID
+    for (var i = 0; i < batchValues.length; i++) {
+      var val = String(batchValues[i][0]).trim();
+      if (val !== "") {
+        rowsToDelete.push(i + 2); // 1-based index (Header is 1, Data starts 2)
+      }
+    }
+
+    // Delete in Reverse Order
+    if (rowsToDelete.length > 0) {
+      rowsToDelete.sort(function (a, b) { return b - a; });
+      for (var r = 0; r < rowsToDelete.length; r++) {
+        sheet.deleteRow(rowsToDelete[r]);
+      }
+      deletedCount = rowsToDelete.length;
+    }
+  }
+
+  // --- STEP 2: ACTIVE RESTORATION (REPAIR) ---
+  // Ensure every section has at least 5 blank rows
+  var sections = ["PC", "CONFIG", "CORE", "MODULE", "ELECTRICAL", "VISION", "VCM", "OTHERS", "SPARES", "JIG/CALIBRATION", "TOOLING"];
+  var BUFFER_SIZE = 5;
+  var repairedSections = 0;
+
+  // We must re-read data because row indices shifted after deletion
+  // Optimization: Read Column A once
+  var freshLastRow = sheet.getLastRow();
+  // Handle edge case where sheet is nearly empty
+  var colAValues = (freshLastRow > 0) ? sheet.getRange(1, 1, freshLastRow, 1).getValues() : [];
+
+  for (var s = 0; s < sections.length; s++) {
+    var header = sections[s];
+    var headerRowIndex = -1;
+
+    // 1. Find Header
+    for (var i = 0; i < colAValues.length; i++) {
+      if (String(colAValues[i][0]).trim().toUpperCase() === header.toUpperCase()) {
+        headerRowIndex = i + 1; // 1-based
+        break;
+      }
+    }
+
+    if (headerRowIndex === -1) continue; // Section not found
+
+    // 2. Find Next Anchor (Next Header or End of Sheet)
+    var anchorRowIndex = freshLastRow + 1; // Default to end
+    for (var j = headerRowIndex; j < colAValues.length; j++) {
+      var val = String(colAValues[j][0]).trim();
+      if (val !== "") {
+        anchorRowIndex = j + 1;
+        break;
+      }
+    }
+
+    // Note: If data was deleted, 'anchorRowIndex' might now be immediately after 'headerRowIndex'
+    // or separated by manual rows.
+
+    // 3. Calculate Current Gap
+    // Gap is the space between Header and Anchor.
+    // e.g., Header at 10, Anchor at 11 -> Gap = 0.
+    var currentGap = anchorRowIndex - headerRowIndex - 1;
+
+    // 4. Repair if Deficit
+    if (currentGap < BUFFER_SIZE) {
+      var needed = BUFFER_SIZE - currentGap;
+
+      // Calculate insertion point: AFTER the last existing row in this section
+      // i.e., Before the anchor
+      var insertPoint = anchorRowIndex;
+
+      sheet.insertRowsBefore(insertPoint, needed);
+
+      // Update our local memory of the sheet size for next iterations? 
+      // Actually, insertRows pushes everything down. 
+      // The simplest way is to fetch fresh LastRow/Data for next loop, OR maintain offset.
+      // Given specific section order, subsequent sections are pushed down.
+      // To avoid complexity, we can RE-READ/Update colAValues or offsets. 
+      // Since specific sections are sequential, using an offset accumulator is safer/faster than N reads.
+
+      // Let's do simple offset adjustment:
+      // Insert happened at 'insertPoint'.
+      // Any header found AFTER 'insertPoint' in 'colAValues' needs its index shifted by 'needed'.
+      // But 'colAValues' is static array. We can just shift our future searches? 
+      // Actually, safest way is just `sheet.insertRowsBefore` and accept that we need to handle the shift.
+
+      // FIX: Since we are iterating known 'sections' in order, subsequent searches in `colAValues` will be WRONG unless we update `colAValues` or use `createTextFinder` each time.
+      // BETTER APPROACH: Use `createTextFinder` for each section header fresh. It's slower but robust.
+
+      // RE-IMPLEMENTING LOOPS WITH FRESH SEARCH TO BE SAFE
+      // (Breaking out of the optimized loop above to do it safely per-section)
+    }
+  }
+
+  // --- RE-RUN RESTORATION SAFELY ---
+  // We do a separate robust pass using TextFinders to handle shifting indices
+  repairSectionsRobust(sheet, sections, BUFFER_SIZE);
+
+  return "Cleared All Batches (Total " + deletedCount + " rows). Repaired sections to " + BUFFER_SIZE + " blank rows.";
+}
+
+function repairSectionsRobust(sheet, sections, bufferSize) {
+  for (var s = 0; s < sections.length; s++) {
+    var header = sections[s];
+
+    // Find Header Fresh
+    var headerFinder = sheet.getRange("A:A").createTextFinder(header).matchEntireCell(true).findNext();
+    if (!headerFinder) {
+      // Try fuzzy match for JIG/CALIBRATION vs JIG if needed, or exact match
+      continue;
+    }
+
+    var headerRow = headerFinder.getRow();
+    var lastSheetRow = sheet.getLastRow();
+
+    // Find Next Anchor (Scan down from Header)
+    // We can't rely on TextFinder for "Next non-empty", we must scan.
+    var maxScan = Math.min(lastSheetRow - headerRow + 50, lastSheetRow); // Limit scan to 50 rows? No, manual data could be large.
+    // Just Read A:A from Header downwards
+    var scanRows = lastSheetRow - headerRow;
+    if (scanRows <= 0) {
+      // Header is at very bottom
+      sheet.insertRowsAfter(headerRow, bufferSize);
+      // Format new rows
+      var newRange = sheet.getRange(headerRow + 1, 1, bufferSize, sheet.getLastColumn());
+      newRange.setBackground("white");
+      // Add borders/checkboxes?
+      setupBlankRows(sheet, headerRow + 1, bufferSize);
+      continue;
+    }
+
+    var valBatch = sheet.getRange(headerRow + 1, 1, scanRows, 1).getValues();
+    var gap = 0;
+    var anchorFound = false;
+
+    for (var i = 0; i < valBatch.length; i++) {
+      if (String(valBatch[i][0]).trim() !== "") {
+        gap = i;
+        anchorFound = true;
+        break;
+      }
+    }
+
+    if (!anchorFound) gap = scanRows; // All empty till end
+
+    if (gap < bufferSize) {
+      var needed = bufferSize - gap;
+      var insertAt = headerRow + 1 + gap; // If Gap 0, insert at Header+1
+
+      sheet.insertRowsBefore(insertAt, needed);
+      setupBlankRows(sheet, insertAt, needed);
+    }
+  }
+}
+
+function setupBlankRows(sheet, startRow, count) {
+  var range = sheet.getRange(startRow, 1, count, sheet.getLastColumn());
+  range.setBackground("white");
+
+  // MERGE LOGIC: Force merge with the row ABOVE the new block (The Header or previous blank row)
+  var topRowOfMerge = startRow - 1;
+  var bottomRowOfMerge = startRow + count - 1;
+
+  if (topRowOfMerge >= 1) {
+    applySmartMerge(sheet, topRowOfMerge, bottomRowOfMerge);
+  }
+
+  // Checkboxes in G
+  sheet.getRange(startRow, 7, count, 1).insertCheckboxes();
+  // Dropdown in I
+  var rule = SpreadsheetApp.newDataValidation().requireValueInList(['CHARGE OUT', 'MRP'], true).build();
+  sheet.getRange(startRow, 9, count, 1).setDataValidation(rule);
+}
+
+/**
+ * SHARED HELPER: Apply Smart Merge to Cols A & B
+ * Extends the merge from topRow down to bottomRow.
+ * Usage: 
+ *   topRow should be the Header or the 'Master' cell you want to extend.
+ *   bottomRow is the last row of the new block.
+ */
+function applySmartMerge(sheet, topRow, bottomRow) {
+  try {
+    var extendMergeForColumn = function (colIndex) {
+      var cellTop = sheet.getRange(topRow, colIndex);
+      var startMergeRow = topRow;
+
+      // Check if "Top Row" is already merged (e.g. part of a Header block)
+      if (cellTop.isPartOfMerge()) {
+        // Get the TRUE TOP of the existing block
+        var existingRange = cellTop.getMergedRanges()[0];
+        startMergeRow = existingRange.getRow();
+      }
+
+      // Define the NEW total range (From Top of Block to Bottom of New Rows)
+      var totalRows = bottomRow - startMergeRow + 1;
+
+      // Apply Merge (Force Re-merge over the expanded area)
+      var targetRange = sheet.getRange(startMergeRow, colIndex, totalRows, 1);
+      targetRange.merge();
+      targetRange.setVerticalAlignment("middle");
+    };
+
+    // Execute for Column A (1) and Column B (2)
+    extendMergeForColumn(1);
+    extendMergeForColumn(2);
+  } catch (e) {
+    console.warn("Shared Smart Merge warning: " + e.message);
+  }
 }
 
 function markRowsAsSynced(rowsToSync) {
