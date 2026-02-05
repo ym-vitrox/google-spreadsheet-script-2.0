@@ -1233,15 +1233,13 @@ function extractProductionData() {
 /**
  * C. Inject Data to Production
  */
-function injectProductionData(payload) {
+function injectProductionData(payload, batchID) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName("ORDERING LIST");
   if (!sheet) throw new Error("ORDERING LIST Sheet Missing");
 
-  if (!sheet) throw new Error("ORDERING LIST Sheet Missing");
-
-  // GENERATE MASTER BATCH ID
-  var masterBatchID = Utilities.formatDate(new Date(), "GMT+8", "yyyyMMdd_HHmmss");
+  // BATCH ID PASSED FROM MAIN
+  if (!batchID) batchID = Utilities.formatDate(new Date(), "GMT+8", "yyyyMMdd_HHmmss"); // Fallback
 
   var itemsAdded = 0;
 
@@ -1265,7 +1263,7 @@ function injectProductionData(payload) {
     if (items && items.length > 0) {
       // Pass the entire section object 'sec' as options
       // INJECT BATCH ID HERE
-      sec.batchID = masterBatchID;
+      sec.batchID = batchID;
       itemsAdded += insertRowsIntoSection(sheet, sec.header, items, sec);
     }
   }
@@ -1404,9 +1402,8 @@ function insertRowsIntoSection(sheet, sectionHeader, items, options) {
   var numberingCounter = currentMaxNum;
 
   // GENERATE BATCH ID (One ID per sync operation set)
-  // Check if options has a batchID, otherwise generate one (though ideal is to pass it down)
-  // For simplicity here, we use the one passed in options or generate unique
-  var batchID = options.batchID || Utilities.formatDate(new Date(), "GMT+8", "yyyyMMdd_HHmmss");
+  // Use the one passed in options
+  var batchID = options.batchID;
 
   for (var x = 0; x < items.length; x++) {
     var itemLabel = "";
@@ -1505,7 +1502,14 @@ function clearLatestBatch() {
     sheet.deleteRow(rowsToDelete[r]);
   }
 
-  return "Cleared Latest Batch (" + latestID + "). Removed " + rowsToDelete.length + " rows.";
+  // 5. RESET SYNC STATUS IN TRIAL LAYOUT (NEW)
+  try {
+    resetSyncStatusForBatch(latestID);
+  } catch (err) {
+    console.warn("Failed to reset sync status for batch " + latestID + ": " + err.message);
+  }
+
+  return "Cleared Latest Batch (" + latestID + "). Removed " + rowsToDelete.length + " rows. Sync status reset.";
 }
 
 /**
@@ -1625,7 +1629,69 @@ function clearAllBatches() {
   // We do a separate robust pass using TextFinders to handle shifting indices
   repairSectionsRobust(sheet, sections, BUFFER_SIZE);
 
-  return "Cleared All Batches (Total " + deletedCount + " rows). Repaired sections to " + BUFFER_SIZE + " blank rows.";
+  // --- STEP 3: RESET SYNC STATUS IN TRIAL LAYOUT (NEW) ---
+  try {
+    resetAllSyncStatus();
+  } catch (err) {
+    console.warn("Failed to reset all sync status: " + err.message);
+  }
+
+  return "Cleared All Batches (Total " + deletedCount + " rows). Repaired sections to " + BUFFER_SIZE + " blank rows. Staging Sync Status Reset.";
+}
+
+/**
+ * HELPER: Reset Sync Status for a specific Batch ID
+ * Clears "SYNCED" in Col J and BatchID in Col S for rows matching the ID.
+ */
+function resetSyncStatusForBatch(batchID) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
+  if (!sheet) return;
+
+  var lastRow = sheet.getLastRow();
+  // We need to look at Col S (19) to find the Batch ID
+  // Data starts at row 2 usually, or we can scan the whole column
+  // Read Col S (Batch ID)
+  // Optimization: Read S and J together? J is 10, S is 19. Too far apart.
+  // Just read S.
+  var batchRange = sheet.getRange(1, 19, lastRow, 1);
+  var batchValues = batchRange.getValues();
+
+  var rowsToReset = [];
+  for (var i = 0; i < batchValues.length; i++) {
+    if (String(batchValues[i][0]) === String(batchID)) {
+      rowsToReset.push(i + 1); // 1-based row index
+    }
+  }
+
+  // Clear them
+  // Basic implementation: Loop and clear. 
+  // Optimization: If many rows, maybe collecting ranges is better, but this is infrequent op.
+  for (var k = 0; k < rowsToReset.length; k++) {
+    var r = rowsToReset[k];
+    sheet.getRange(r, 10).clearContent(); // Clear SYNCED
+    sheet.getRange(r, 19).clearContent(); // Clear Batch ID
+  }
+}
+
+/**
+ * HELPER: Reset ALL Sync Status
+ * Clears Col J and Col S entirely (keeping headers if any, but usually we just clear data)
+ * Safest is to clear from Row 2 down.
+ */
+function resetAllSyncStatus() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("TRIAL-LAYOUT CONFIGURATION");
+  if (!sheet) return;
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+
+  // Clear Col J (10) from Row 2
+  sheet.getRange(2, 10, lastRow - 1, 1).clearContent();
+
+  // Clear Col S (19) from Row 2
+  sheet.getRange(2, 19, lastRow - 1, 1).clearContent(); // Col S
 }
 
 function repairSectionsRobust(sheet, sections, bufferSize) {
@@ -1738,7 +1804,7 @@ function applySmartMerge(sheet, topRow, bottomRow) {
   }
 }
 
-function markRowsAsSynced(rowsToSync) {
+function markRowsAsSynced(rowsToSync, batchID) {
   if (!rowsToSync || rowsToSync.length === 0) return;
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1747,7 +1813,10 @@ function markRowsAsSynced(rowsToSync) {
 
   for (var i = 0; i < rowsToSync.length; i++) {
     var r = rowsToSync[i].row;
-    sheet.getRange(r, 10).setValue("SYNCED");
+    sheet.getRange(r, 10).setValue("SYNCED"); // Col J
+    if (batchID) {
+      sheet.getRange(r, 19).setValue(batchID); // Col S (Index 19)
+    }
   }
 }
 

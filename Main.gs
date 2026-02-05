@@ -212,10 +212,13 @@ function runProductionSync() {
     }
 
     // 3. Inject Data (Write to Production)
-    var itemsAdded = injectProductionData(payload);
+    // GENERATE BATCH ID (Centralized)
+    var batchID = Utilities.formatDate(new Date(), "GMT+8", "yyyyMMdd_HHmmss");
+
+    var itemsAdded = injectProductionData(payload, batchID);
 
     // 4. Update Status (Write to Staging)
-    markRowsAsSynced(payload.rowsToMarkSynced);
+    markRowsAsSynced(payload.rowsToMarkSynced, batchID);
 
     // 5. Success Message
     var msg = "Synchronization Successful!\n\n";
