@@ -363,7 +363,7 @@
         <span class="label">Spare Parts (Bundle)</span>
         <ul id="spareList" class="tool-list" style="margin-bottom: 8px;"></ul>
 
-        <span class="alert-label">⚠ DECISION REQUIRED:</span>
+        <span class="alert-label">DECISION REQUIRED:</span>
         <select id="spareSelect" class="required-select">
           <option value="" selected>Select Option...</option>
           <option value="yes">Yes, Include All</option>
@@ -677,7 +677,7 @@
           mandatoryBox.className = "read-only-text";
           mandatoryBox.style.marginBottom = "6px";
           mandatoryBox.style.backgroundColor = "#e8eaed";
-          mandatoryBox.innerHTML = "🔒 <b>Included:</b> " + tool.mandatoryItem.id + " (" + (tool.mandatoryItem.desc || "") + ")";
+          mandatoryBox.innerHTML = "<b>Included:</b> " + tool.mandatoryItem.id + " (" + (tool.mandatoryItem.desc || "") + ")";
           div.appendChild(mandatoryBox);
 
           div.dataset.mandatoryId = tool.mandatoryItem.id;
@@ -1144,7 +1144,7 @@
       if (data.electrical) {
         if (data.electrical.status === "FULL") {
           // STOP! LIMIT REACHED
-          elecBox.innerHTML = "⚠️ <b>ALL ASSIGNED (Limit Reached)</b><br>Max " + data.electrical.max + " instances allowed.";
+          elecBox.innerHTML = "<b>ALL ASSIGNED (Limit Reached)</b><br>Max " + data.electrical.max + " instances allowed.";
           elecBox.style.color = "#c0392b";
           elecBox.style.backgroundColor = "#fadbd8";
           elecBox.style.borderColor = "#c0392b";
@@ -1186,7 +1186,7 @@
           }
 
           if (tool.requiresRubberTip) {
-            html += '<span class="alert-label">⚠ SELECTION REQUIRED:</span>';
+            html += '<span class="alert-label">SELECTION REQUIRED:</span>';
             html += '<select id="tip_' + tool.id + '" class="required-select">';
             html += '<option value="" disabled selected>Select Rubber Tip...</option>';
             if (tool.rubberTipOptions) {

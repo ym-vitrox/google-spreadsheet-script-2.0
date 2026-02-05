@@ -1513,7 +1513,7 @@ function clearLatestBatch() {
 }
 
 /**
- * PHASE 13: CLEAR ALL BATCHES (NUCLEAR OPTION)
+ * PHASE 13: CLEAR ALL BATCHES (RESET ALL)
  * Removes ALL rows with a Batch ID (Col Q).
  * Performs "Active Restoration" to ensure 5 blank rows per section.
  */

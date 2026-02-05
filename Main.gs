@@ -239,7 +239,7 @@ function runProductionSync() {
 function undoLastSync() {
   var ui = SpreadsheetApp.getUi();
   var result = ui.alert(
-    '⚠ Undo Last Sync',
+    'Undo Last Sync',
     'This will PERMANENTLY DELETE all rows added in the most recent sync batch.\n\n' +
     'Any manual edits made to those specific rows (e.g. Remarks) will be lost.\n\n' +
     'Are you sure you want to continue?',
@@ -259,7 +259,7 @@ function undoLastSync() {
 function runClearAllBatches() {
   var ui = SpreadsheetApp.getUi();
   var result = ui.alert(
-    '⚠ Clear All Batches (Nuclear)',
+    'Clear All Batches (Reset All)',
     'This will PERMANENTLY DELETE ALL rows that were ever synced (rows with a Batch ID).\n\n' +
     'Manual legacy entries (without Batch IDs) will be preserved.\n' +
     'The system will also restore 5 blank rows to every section.\n\n' +
