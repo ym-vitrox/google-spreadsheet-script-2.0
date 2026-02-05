@@ -10,6 +10,9 @@
 var RUBBER_TIP_PARENTS_BACKEND = ["430001-A689", "430001-A690", "430001-A691", "430001-A692"];
 var RUBBER_TIP_SOURCE_ID_BACKEND = "430001-A380";
 
+// BATCH TRACKING CONSTANTS
+var BATCH_ID_COL_INDEX = 17; // Column Q is index 17
+
 // Vision PC Target IDs
 var VISION_PC_IDS = ["430001-A366", "430001-A367"];
 
@@ -1235,6 +1238,11 @@ function injectProductionData(payload) {
   var sheet = ss.getSheetByName("ORDERING LIST");
   if (!sheet) throw new Error("ORDERING LIST Sheet Missing");
 
+  if (!sheet) throw new Error("ORDERING LIST Sheet Missing");
+
+  // GENERATE MASTER BATCH ID
+  var masterBatchID = Utilities.formatDate(new Date(), "GMT+8", "yyyyMMdd_HHmmss");
+
   var itemsAdded = 0;
 
   var sections = [
@@ -1256,6 +1264,8 @@ function injectProductionData(payload) {
     var items = payload[sec.key];
     if (items && items.length > 0) {
       // Pass the entire section object 'sec' as options
+      // INJECT BATCH ID HERE
+      sec.batchID = masterBatchID;
       itemsAdded += insertRowsIntoSection(sheet, sec.header, items, sec);
     }
   }
@@ -1425,6 +1435,11 @@ function insertRowsIntoSection(sheet, sectionHeader, items, options) {
   var output = [];
   var numberingCounter = currentMaxNum;
 
+  // GENERATE BATCH ID (One ID per sync operation set)
+  // Check if options has a batchID, otherwise generate one (though ideal is to pass it down)
+  // For simplicity here, we use the one passed in options or generate unique
+  var batchID = options.batchID || Utilities.formatDate(new Date(), "GMT+8", "yyyyMMdd_HHmmss");
+
   for (var x = 0; x < items.length; x++) {
     var itemLabel = "";
     if (items[x].requiresNumbering) {
@@ -1446,6 +1461,14 @@ function insertRowsIntoSection(sheet, sectionHeader, items, options) {
   // Write 7 columns (C through I)
   sheet.getRange(startWriteRow, 3, itemsNeeded, 7).setValues(output);
 
+  // 6.5 Write Batch ID to Hidden Column Q (Index 17)
+  // We write an array of [[batchID], [batchID], ...]
+  var batchData = [];
+  for (var b = 0; b < itemsNeeded; b++) {
+    batchData.push([batchID]);
+  }
+  sheet.getRange(startWriteRow, BATCH_ID_COL_INDEX, itemsNeeded, 1).setValues(batchData);
+
   // 7. Apply Data Validation (Checkbox & Dropdown)
   sheet.getRange(startWriteRow, 7, itemsNeeded, 1).insertCheckboxes();
 
@@ -1457,6 +1480,64 @@ function insertRowsIntoSection(sheet, sectionHeader, items, options) {
   typeRange.setDataValidation(rule);
 
   return itemsNeeded;
+}
+
+/**
+ * NEW: Clear Latest Batch Feature
+ * Finds the latest Batch ID in Column Q and deletes those rows.
+ */
+function clearLatestBatch() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("ORDERING LIST");
+  if (!sheet) throw new Error("ORDERING LIST Sheet Missing");
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return "No data to clear."; // Header only
+
+  // 1. Read Column Q (Batch IDs)
+  // Range: Q2:Q_LastRow
+  var batchRange = sheet.getRange(2, BATCH_ID_COL_INDEX, lastRow - 1, 1);
+  var batchValues = batchRange.getValues(); // 2D array [[id], [id]...]
+
+  // 2. Identify Latest Batch ID
+  var uniqueIDs = new Set();
+  var validIDs = [];
+
+  for (var i = 0; i < batchValues.length; i++) {
+    var val = String(batchValues[i][0]).trim();
+    if (val !== "") {
+      uniqueIDs.add(val);
+      validIDs.push({ id: val, rowIndex: i + 2 }); // Save absolute row index
+    }
+  }
+
+  if (uniqueIDs.size === 0) return "No synced batches found (Column Q is empty).";
+
+  // Sort IDs to find the latest (Lexicographical sort works for yyyyMMdd_HHmmss)
+  var sortedIDs = Array.from(uniqueIDs).sort().reverse();
+  var latestID = sortedIDs[0];
+
+  // 3. Collect Rows to Delete
+  var rowsToDelete = [];
+  for (var k = 0; k < validIDs.length; k++) {
+    if (validIDs[k].id === latestID) {
+      rowsToDelete.push(validIDs[k].rowIndex);
+    }
+  }
+
+  if (rowsToDelete.length === 0) return "Error: Latest Batch ID found but no rows matched.";
+
+  // 4. Delete Rows (Bottom-Up to avoid index shift issues)
+  // We sort descending just to be safe
+  rowsToDelete.sort(function (a, b) { return b - a; });
+
+  // Optimization: consecutive rows can be deleted in bulk?
+  // For safety, simple reverse deletion loop is robust enough for small batches (usually < 50 items)
+  for (var r = 0; r < rowsToDelete.length; r++) {
+    sheet.deleteRow(rowsToDelete[r]);
+  }
+
+  return "Cleared Latest Batch (" + latestID + "). Removed " + rowsToDelete.length + " rows.";
 }
 
 function markRowsAsSynced(rowsToSync) {

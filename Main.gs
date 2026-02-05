@@ -72,6 +72,8 @@ function onOpen() {
   // Menu 3: Sync to Order List (Production Sync)
   ui.createMenu('Sync to Order List')
     .addItem('Run Synchronization', 'runProductionSync')
+    .addSeparator()
+    .addItem('Undo Last Sync (Clear Latest Batch)', 'undoLastSync')
     .addToUi();
 }
 
@@ -224,6 +226,29 @@ function runProductionSync() {
   } catch (e) {
     console.error(e);
     ui.alert("Sync Error", e.message, ui.ButtonSet.OK);
+  }
+}
+
+// =========================================
+// 5.5 UNDO LAST SYNC (NEW)
+// =========================================
+function undoLastSync() {
+  var ui = SpreadsheetApp.getUi();
+  var result = ui.alert(
+    '⚠ Undo Last Sync',
+    'This will PERMANENTLY DELETE all rows added in the most recent sync batch.\n\n' +
+    'Any manual edits made to those specific rows (e.g. Remarks) will be lost.\n\n' +
+    'Are you sure you want to continue?',
+    ui.ButtonSet.YES_NO
+  );
+
+  if (result == ui.Button.YES) {
+    try {
+      var statusMsg = clearLatestBatch(); // Call Backend
+      ui.alert("Operations Complete", statusMsg, ui.ButtonSet.OK);
+    } catch (e) {
+      ui.alert("Error", "Undo Failed: " + e.message, ui.ButtonSet.OK);
+    }
   }
 }
 
