@@ -144,10 +144,10 @@ function handleConfigSection(sheet, row, newVal, oldVal) {
 
   // Insert Logic
   if (newVal === BASIC_TOOL_TRIGGER) {
-    insertShoppingList(sheet, row, 10, "REF_DATA!I:I", "REF_DATA!I:J");
+    insertShoppingList(sheet, row, 10, "REF_DATA!I2:I", "REF_DATA!I:J"); // Fixed Range I2:I
   }
   if (newVal === PNEUMATIC_TRIGGER) {
-    insertShoppingList(sheet, row, 3, "REF_DATA!K:K", "REF_DATA!K:L");
+    insertShoppingList(sheet, row, 3, "REF_DATA!K2:K", "REF_DATA!K:L"); // Fixed Range K2:K
   }
 }
 
@@ -294,8 +294,8 @@ function updateReferenceData(sourceSS, sourceSheet) {
   // 1. Backup Existing Mappings (Preserve W:AF)
   var lastRefRow = refSheet.getLastRow();
   var existingMappings = {};
-  if (lastRefRow > 0) {
-    var currentData = refSheet.getRange(1, 3, lastRefRow, 30).getValues(); // C:AF
+  if (lastRefRow > 1) { // Start from Row 2
+    var currentData = refSheet.getRange(2, 3, lastRefRow - 1, 30).getValues(); // C2:AF
     for (var i = 0; i < currentData.length; i++) {
       var pId = currentData[i][0].toString().trim();
       if (pId !== "") {
@@ -310,16 +310,16 @@ function updateReferenceData(sourceSS, sourceSheet) {
     }
   }
 
-  // 2. Clear Target Areas
-  refSheet.getRange("A:D").clear();
-  refSheet.getRange("W:AF").clear();
+  // 2. Clear Target Areas (Start from Row 2)
+  refSheet.getRange("A2:D").clearContent();
+  refSheet.getRange("W2:AF").clearContent();
 
   // 3. Fetch New Data
   var configItems = fetchRawItems(sourceSheet, "OPTIONAL MODULE: 430001-A712", 6, 7, ["CONFIGURABLE MODULE"]);
   var moduleItems = fetchRawItems(sourceSheet, "CONFIGURABLE MODULE: 430001-A713", 6, 7, ["CONFIGURABLE VISION MODULE"]);
 
-  // 4. Write Data
-  if (configItems.length > 0) refSheet.getRange(1, 1, configItems.length, 2).setValues(configItems);
+  // 4. Write Data (Start at Row 2)
+  if (configItems.length > 0) refSheet.getRange(2, 1, configItems.length, 2).setValues(configItems);
   if (moduleItems.length > 0) {
     var moduleOutput = [];
     var mappingOutput = [];
@@ -341,21 +341,21 @@ function updateReferenceData(sourceSS, sourceSheet) {
       moduleOutput.push([mId, mDesc]);
       mappingOutput.push([eId, eDesc, tId, tDesc, jId, jDesc, vId, vDesc, spId, spDesc]);
     }
-    refSheet.getRange(1, 3, moduleOutput.length, 2).setValues(moduleOutput);
-    refSheet.getRange(1, 23, mappingOutput.length, 10).setValues(mappingOutput);
+    refSheet.getRange(2, 3, moduleOutput.length, 2).setValues(moduleOutput);
+    refSheet.getRange(2, 23, mappingOutput.length, 10).setValues(mappingOutput);
   }
 }
 
 function updateShoppingLists(sourceSheet) {
   var destSS = SpreadsheetApp.getActiveSpreadsheet();
   var refSheet = destSS.getSheetByName("REF_DATA");
-  refSheet.getRange("I:L").clear();
+  refSheet.getRange("I2:L").clearContent(); // Start from Row 2
 
   var basicItems = fetchShoppingListItems(sourceSheet, "List-Optional Basic Tool Module: 430001-A378", 12, 13, "STRICT");
-  if (basicItems.length > 0) refSheet.getRange(1, 9, basicItems.length, 2).setValues(basicItems);
+  if (basicItems.length > 0) refSheet.getRange(2, 9, basicItems.length, 2).setValues(basicItems);
 
   var pneumaticItems = fetchShoppingListItems(sourceSheet, "List-Optional Pneumatic Module : 430001-A714", 12, 13, "SKIP_EMPTY");
-  if (pneumaticItems.length > 0) refSheet.getRange(1, 11, pneumaticItems.length, 2).setValues(pneumaticItems);
+  if (pneumaticItems.length > 0) refSheet.getRange(2, 11, pneumaticItems.length, 2).setValues(pneumaticItems);
 }
 
 function processToolingOptions(sourceSS, refSheet) {
@@ -412,8 +412,8 @@ function processToolingOptions(sourceSS, refSheet) {
     }
   }
 
-  refSheet.getRange("P:S").clearContent();
-  if (databaseOutput.length > 0) refSheet.getRange(1, 16, databaseOutput.length, 4).setValues(databaseOutput);
+  refSheet.getRange("P2:S").clearContent(); // Start from Row 2
+  if (databaseOutput.length > 0) refSheet.getRange(2, 16, databaseOutput.length, 4).setValues(databaseOutput);
 
   // --- STEP 3: GENERATE MENU WITH MERGED DESCRIPTIONS ---
   var menuOutput = [];
@@ -452,8 +452,8 @@ function processToolingOptions(sourceSS, refSheet) {
       }
     }
   }
-  refSheet.getRange("U:V").clearContent();
-  if (menuOutput.length > 0) refSheet.getRange(1, 21, menuOutput.length, 2).setValues(menuOutput);
+  refSheet.getRange("U2:V").clearContent(); // Start from Row 2
+  if (menuOutput.length > 0) refSheet.getRange(2, 21, menuOutput.length, 2).setValues(menuOutput);
 }
 
 function fetchShoppingListItems(sourceSheet, triggerPhrase, colID, colDesc, stopMode) {

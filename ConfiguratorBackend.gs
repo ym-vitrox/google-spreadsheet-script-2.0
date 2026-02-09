@@ -35,9 +35,9 @@ function getModuleList() {
   if (!sheet) return [];
 
   var lastRow = sheet.getLastRow();
-  if (lastRow < 1) return [];
+  if (lastRow < 2) return [];
 
-  var rawValues = sheet.getRange(1, 3, lastRow, 2).getValues();
+  var rawValues = sheet.getRange(2, 3, lastRow - 1, 2).getValues(); // Start from Row 2
   var modules = [];
 
   for (var i = 0; i < rawValues.length; i++) {
@@ -60,8 +60,9 @@ function getVisionPCOptions() {
   if (!sheet) return [];
 
   var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return [];
   // Columns A & B are Part ID & Description (Cols 1 & 2)
-  var rawValues = sheet.getRange(1, 1, lastRow, 2).getValues();
+  var rawValues = sheet.getRange(2, 1, lastRow - 1, 2).getValues(); // Start from Row 2
 
   var options = [];
 
@@ -92,10 +93,10 @@ function getBaseModuleOptions() {
   if (!sheet) return [];
 
   var lastRow = sheet.getLastRow();
-  if (lastRow < 1) return [];
+  if (lastRow < 2) return [];
 
   // Columns I (9) and J (10)
-  var rawValues = sheet.getRange(1, 9, lastRow, 2).getValues();
+  var rawValues = sheet.getRange(2, 9, lastRow - 1, 2).getValues(); // Start from Row 2
   var options = [];
 
   for (var i = 0; i < rawValues.length; i++) {
@@ -122,11 +123,11 @@ function getBaseModuleToolingList() {
   if (!sheet) return [];
 
   var lastRow = sheet.getLastRow();
-  if (lastRow < 1) return [];
+  if (lastRow < 2) return [];
 
-  // 1. Fetch Data
-  var toolingRange = sheet.getRange(1, 21, lastRow, 2).getValues(); // U:V
-  var exclusionRange = sheet.getRange(1, 25, lastRow, 2).getValues(); // Y:Z
+  // 1. Fetch Data (Start from Row 2)
+  var toolingRange = sheet.getRange(2, 21, lastRow - 1, 2).getValues(); // U:V
+  var exclusionRange = sheet.getRange(2, 25, lastRow - 1, 2).getValues(); // Y:Z
 
   // 2. Build Exclusion Set
   var excludedIDs = new Set();
@@ -301,7 +302,10 @@ function getBaseModuleToolingList() {
 function getModuleDetails(moduleID) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var refSheet = ss.getSheetByName("REF_DATA");
-  var dataRange = refSheet.getRange("C:AF").getValues();
+  var lastRow = refSheet.getLastRow();
+  if (lastRow < 2) return { error: "Module ID not found." };
+
+  var dataRange = refSheet.getRange(2, 3, lastRow - 1, 30).getValues(); // C2:AF
   var rowData = null;
 
   for (var i = 0; i < dataRange.length; i++) {
@@ -871,20 +875,22 @@ function buildMasterDictionary() {
     }
   }
 
+  if (lastRow < 2) return dictionary; // Safety check
+
   // 0. Base Data (Cols A & B) - Includes Vision PCs
-  var baseData = refSheet.getRange(1, 1, lastRow, 2).getValues();
+  var baseData = refSheet.getRange(2, 1, lastRow - 1, 2).getValues();
   for (var z = 0; z < baseData.length; z++) {
     addToDict(baseData[z][0], baseData[z][1]);
   }
 
   // 1. Modules (Cols C & D)
-  var moduleData = refSheet.getRange(1, 3, lastRow, 2).getValues();
+  var moduleData = refSheet.getRange(2, 3, lastRow - 1, 2).getValues();
   for (var i = 0; i < moduleData.length; i++) {
     addToDict(moduleData[i][0], moduleData[i][1]);
   }
 
   // 1.5. Configurable Base Modules & Shopping Lists (Cols I & J)
-  var configData = refSheet.getRange(1, 9, lastRow, 2).getValues();
+  var configData = refSheet.getRange(2, 9, lastRow - 1, 2).getValues();
   for (var c = 0; c < configData.length; c++) {
     var cId = String(configData[c][0]).trim();
     var cDesc = String(configData[c][1]).trim();
@@ -894,7 +900,7 @@ function buildMasterDictionary() {
   }
 
   // 2. Tooling Menu
-  var menuData = refSheet.getRange(1, 21, lastRow, 2).getValues();
+  var menuData = refSheet.getRange(2, 21, lastRow - 1, 2).getValues();
   for (var j = 0; j < menuData.length; j++) {
     var packed = String(menuData[j][1]);
     if (packed.indexOf("::") > -1) {
@@ -904,7 +910,7 @@ function buildMasterDictionary() {
   }
 
   // 3. Manual Mapping Block
-  var manualData = refSheet.getRange(1, 23, lastRow, 10).getValues();
+  var manualData = refSheet.getRange(2, 23, lastRow - 1, 10).getValues();
   for (var k = 0; k < manualData.length; k++) {
     var row = manualData[k];
     for (var p = 0; p < 10; p += 2) {
@@ -1668,11 +1674,35 @@ function resetAllSyncStatus() {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
 
-  // Clear Col J (10) from Row 2
-  sheet.getRange(2, 10, lastRow - 1, 1).clearContent();
+  // Read Column J (Sync Status) and Column S (Batch ID)
+  // J is index 10, S is index 19.
+  // We'll read them separately or as a block if close? They are far apart (9 cols).
+  // Better to read separate ranges to avoid fetching huge chunk of unused data.
 
-  // Clear Col S (19) from Row 2
-  sheet.getRange(2, 19, lastRow - 1, 1).clearContent(); // Col S
+  var syncRange = sheet.getRange(2, 10, lastRow - 1, 1); // Col J
+  var batchRange = sheet.getRange(2, 19, lastRow - 1, 1); // Col S
+
+  var syncValues = syncRange.getValues();
+  var batchValues = batchRange.getValues();
+
+  var hasChanges = false;
+
+  for (var i = 0; i < batchValues.length; i++) {
+    var batchID = String(batchValues[i][0]).trim();
+
+    // TARGETED LOGIC: Only clear if a Batch ID exists
+    if (batchID !== "") {
+      batchValues[i][0] = ""; // Clear Batch ID
+      syncValues[i][0] = "";  // Clear Sync Status
+      hasChanges = true;
+    }
+  }
+
+  // Write back only if changes were made
+  if (hasChanges) {
+    syncRange.setValues(syncValues);
+    batchRange.setValues(batchValues);
+  }
 }
 
 function repairSectionsRobust(sheet, sections, bufferSize) {
