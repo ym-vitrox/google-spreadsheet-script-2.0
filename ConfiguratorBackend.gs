@@ -27,6 +27,10 @@ var MULTI_SELECT_TOOLS = ["430001-A380", "430001-A495"];
 // NEW: Categorized Multi Tools (Complex Grouping)
 var CATEGORIZED_MULTI_TOOLS = ["430001-A494"]; // Die Ejector Tooling
 
+// Base Tooling IDs to permanently exclude from the Machine Setup UI
+// Add any parent ID here that exists in Tooling Illustration but should not appear in the UI
+var EXCLUDED_BASE_TOOLING_IDS = ["430000-S001"];
+
 /**
  * 1. Get List of Modules (ID and Description)
  */
@@ -167,6 +171,11 @@ function getBaseModuleToolingList() {
 
     // EXCLUSION LOGIC
     if (excludedIDs.has(parentID)) {
+      continue;
+    }
+
+    // HARD-CODED EXCLUSION (IDs that exist in source but are not needed in UI)
+    if (EXCLUDED_BASE_TOOLING_IDS.indexOf(parentID) > -1) {
       continue;
     }
 
@@ -756,7 +765,7 @@ function saveMachineSetup(payloadRaw) {
           cell.setValue(val);
 
           // Formatting (Safe Merge)
-          var mergeRange = sheet.getRange(targetRow, 3, 1, 5);
+          var mergeRange = sheet.getRange(targetRow, 3, 1, 4);
           try {
             // Only merge if not already merged or if we just created it
             mergeRange.merge();
@@ -764,7 +773,7 @@ function saveMachineSetup(payloadRaw) {
           } catch (e) { }
 
           // Borders (All Borders)
-          sheet.getRange(targetRow, 3, 1, 5).setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
+          sheet.getRange(targetRow, 3, 1, 4).setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
         }
       }
     }
@@ -839,8 +848,8 @@ function saveMachineSetup(payloadRaw) {
       outputRange.setValues(values);
       outputRange.setFontWeights(fontWeights);
 
-      // Cleanup Col F just to be safe
-      sheet.getRange(startRow, 6, requiredSlots, 1).clearContent();
+      // Merge E:F for each row (Description spans two columns)
+      sheet.getRange(startRow, 5, requiredSlots, 2).mergeAcross();
 
       // Borders
       sheet.getRange(startRow, 3, requiredSlots, 4).setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
@@ -1864,7 +1873,7 @@ function initializeReleaseColumns() {
 // EXTERNAL DATA HELPERS
 // =========================================
 function fetchCoreItemsFromExternal() {
-  var externalID = "1nTSOqK4nGRkUEHGFnUF30gRCGFQMo6I2l8vhZB-NkSA";
+  var externalID = "1BS5zr_tZpXFdnMLB8B5xYLCRcW4ujcMlpZoCKmJNGA4";
   var ss = SpreadsheetApp.openById(externalID);
   var sheet = ss.getSheetByName("BOM Structure Tree Diagram");
   if (!sheet) return [];

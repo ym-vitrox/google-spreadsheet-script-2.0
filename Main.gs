@@ -92,7 +92,7 @@ function openSidebar() {
 function runMasterSync() {
   var ui = SpreadsheetApp.getUi();
   try {
-    var sourceSpreadsheetId = "1nTSOqK4nGRkUEHGFnUF30gRCGFQMo6I2l8vhZB-NkSA";
+    var sourceSpreadsheetId = "1BS5zr_tZpXFdnMLB8B5xYLCRcW4ujcMlpZoCKmJNGA4";
     var sourceTabName = "BOM Structure Tree Diagram";
 
     var sourceSS;
