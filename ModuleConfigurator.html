@@ -516,16 +516,19 @@
       var container = document.getElementById("baseModuleList");
       container.innerHTML = "";
       for (var i = 0; i < count; i++) {
-        createBaseModuleDropdown(container);
+        createBaseModuleDropdown(container, i);
       }
     }
 
-    function createBaseModuleDropdown(container) {
+    function createBaseModuleDropdown(container, rowIndex) {
       var div = document.createElement("div");
       div.className = "row-item";
+      div.style.display = "flex";
+      div.style.alignItems = "center";
 
       var select = document.createElement("select");
       select.className = "base-mod-select";
+      select.style.flex = "1";
       select.onchange = validateBaseModules; // Attach de-duplication
 
       var defaultOpt = document.createElement("option");
@@ -541,6 +544,19 @@
       });
 
       div.appendChild(select);
+
+      // Only show remove button for rows beyond the default 3
+      if (rowIndex >= 3) {
+        var removeBtn = document.createElement("span");
+        removeBtn.className = "remove-btn";
+        removeBtn.innerHTML = "&times;";
+        removeBtn.onclick = function () {
+          container.removeChild(div);
+          validateBaseModules(); // Re-run de-dup after removal
+        };
+        div.appendChild(removeBtn);
+      }
+
       container.appendChild(div);
 
       validateBaseModules(); // Run check immediately to set button state
@@ -554,7 +570,7 @@
         alert("No more options available to add.");
         return;
       }
-      createBaseModuleDropdown(container);
+      createBaseModuleDropdown(container, currentCount); // currentCount >= 3, so remove btn will show
     }
 
     // Visual De-Duplication Strategy
