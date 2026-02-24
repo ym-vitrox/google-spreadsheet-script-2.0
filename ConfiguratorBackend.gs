@@ -610,9 +610,12 @@ function saveConfiguration(payload) {
     }
 
     if (startScanning) {
-      if (slotID === "B33" || (slotID.startsWith("B") && parseInt(slotID.substring(1)) > 32)) {
-        break; // End of list (B33 is stop)
+      if (slotID.startsWith("B") && parseInt(slotID.substring(1)) > 40) {
+        break; // End of list (B41+ is stop, B40 is last valid)
       }
+
+      // Skip divider rows ("---" in Col H)
+      if (desc === "---") continue;
 
       // If desc is empty, we found our target
       if (desc === "") {
@@ -623,7 +626,7 @@ function saveConfiguration(payload) {
   }
 
   if (targetRowIndex === -1) {
-    throw new Error("Configuration List is full (B10-B32) or could not be located at 'CONFIGURATION' header.");
+    throw new Error("Configuration List is full (B10-B40) or could not be located at 'CONFIGURATION' header.");
   }
 
   // WRITE DATA
@@ -1015,7 +1018,7 @@ function extractProductionData() {
 
     // A. EXTRACT CONFIGURABLE BASE MODULES -> payload.CONFIG
     if (configStartR !== -1 && baseToolingStartR !== -1 && baseToolingStartR > configStartR + 1) {
-      var configRange = sheet.getRange(configStartR + 1, 3, baseToolingStartR - configStartR - 1, 1).getValues(); // Col C only
+      var configRange = sheet.getRange(configStartR, 3, baseToolingStartR - configStartR, 1).getValues(); // Col C only (include header row which holds first entry)
       for (var c = 0; c < configRange.length; c++) {
         var cId = String(configRange[c][0]).trim();
         if (cId) {
@@ -1148,15 +1151,18 @@ function extractProductionData() {
     var syncStatus = String(row[9]).trim(); // Col J (Index 9)
     var moduleID = String(row[10]).trim();  // Col K (Index 10)
 
-    // STOP CONDITION: B33 or higher / End of List
-    if (turretName === "B33") break;
+    // STOP CONDITION: B41 or higher / End of List (B40 is last valid)
     if (turretName.startsWith("B")) {
       var num = parseInt(turretName.substring(1));
-      if (!isNaN(num) && num > 32) break;
+      if (!isNaN(num) && num > 40) break;
     }
 
     // SKIP CONDITION: Not a B-Slot (e.g. empty row or garbage)
     if (!turretName.startsWith("B")) continue;
+
+    // SKIP CONDITION: Divider row ("---" in Col H / MODULES SELECTION)
+    var moduleSelDesc = String(row[7]).trim(); // Col H (Index 7)
+    if (moduleSelDesc === "---") continue;
 
     // SKIP CONDITION: Already Synced
     if (syncStatus === "SYNCED") continue;
