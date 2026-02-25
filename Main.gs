@@ -25,6 +25,10 @@ function processGlobalEdits(e) {
   var newVal = e.value;
   var oldVal = e.oldValue;
 
+  // SOFT LOCK GUARD — Runs before all route handlers.
+  // Reverts edits to released rows (Col G = TRUE) on non-G columns.
+  if (applySoftLockGuard(e, sheet)) return;
+
   // ROUTE 1: Config Section Edits (Column 4 - Part ID)
   if (col === 4) {
     // --- LOCATE SECTIONS ---
@@ -45,6 +49,67 @@ function processGlobalEdits(e) {
   if (col === 7) {
     handleCheckboxEdit(e); // Located in OrderingListHandlers.gs
   }
+}
+
+// =========================================
+// 1.5 SOFT LOCK GUARD (Installable Trigger Enforcement)
+// =========================================
+/**
+ * Checks if the edit touches any released row (Col G = TRUE) on a non-Col-G column.
+ * If so, reverts all affected cells to their old values and shows a toast.
+ * Col G edits are always allowed through (password flow handles them separately).
+ *
+ * @param {Object} e     - The trigger event object.
+ * @param {Sheet}  sheet - The active sheet (ORDERING LIST).
+ * @returns {boolean} true if at least one cell was blocked and reverted, false otherwise.
+ */
+function applySoftLockGuard(e, sheet) {
+  var range = e.range;
+  var col = range.getColumn();
+
+  // Col G (7) edits always pass through — handled by handleCheckboxEdit
+  if (col === 7) return false;
+
+  var startRow = range.getRow();
+  var numRows = range.getNumRows();
+  var numCols = range.getNumColumns();
+
+  // Read Col G for all rows in the edited range in one API call
+  var colGValues = sheet.getRange(startRow, 7, numRows, 1).getValues();
+
+  var blockedRows = [];
+  for (var i = 0; i < numRows; i++) {
+    var isReleased = colGValues[i][0] === true;
+    if (isReleased) {
+      blockedRows.push(i); // 0-based index within the range
+    }
+  }
+
+  if (blockedRows.length === 0) return false; // Nothing to block
+
+  // Revert only the cells in blocked rows.
+  // e.oldValue only works for single-cell edits (GAS limitation).
+  // For multi-cell blocked rows, clearContent is the safest revert.
+  if (numRows === 1 && numCols === 1) {
+    // Single cell — e.oldValue is reliable
+    var oldValue = (e.oldValue !== undefined) ? e.oldValue : "";
+    range.setValue(oldValue);
+  } else {
+    // Multi-cell range — revert each blocked row's cells
+    for (var j = 0; j < blockedRows.length; j++) {
+      var blockedRowOffset = blockedRows[j];
+      var blockedRange = sheet.getRange(startRow + blockedRowOffset, range.getColumn(), 1, numCols);
+      blockedRange.clearContent();
+    }
+  }
+
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    blockedRows.length + " row(s) are released and cannot be edited. Change(s) reverted.",
+    "Edit Blocked",
+    4
+  );
+
+  return true;
 }
 
 // =========================================

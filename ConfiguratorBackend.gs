@@ -1465,9 +1465,6 @@ function insertRowsIntoSection(sheet, sectionHeader, items, options) {
     .build();
   typeRange.setDataValidation(rule);
 
-  // Ensure newly written rows are in the unprotected range (not accidentally locked)
-  refreshUnprotectedRanges(sheet);
-
   return itemsNeeded;
 }
 
@@ -1595,9 +1592,6 @@ function clearLatestBatch() {
     console.warn("Failed to reset sync status for batch " + latestID + ": " + err.message);
   }
 
-  // Refresh protection to account for deleted rows
-  refreshUnprotectedRanges(sheet);
-
   var msg = "Cleared Latest Batch (" + latestID + "). Removed " + rowsToDelete.length + " rows. Sync status reset.";
   return { message: msg, releasedCount: releasedCount };
 }
@@ -1713,9 +1707,6 @@ function clearAllBatches() {
   } catch (err) {
     console.warn("Failed to reset all sync status: " + err.message);
   }
-
-  // Refresh protection to account for deleted rows
-  refreshUnprotectedRanges(sheet);
 
   var msg = "Cleared All Batches (Total " + deletedCount + " rows). Repaired sections to " + BUFFER_SIZE + " blank rows. Staging Sync Status Reset.";
   return { message: msg, releasedCount: releasedCount };
