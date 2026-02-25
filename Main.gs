@@ -67,8 +67,10 @@ function applySoftLockGuard(e, sheet) {
   var range = e.range;
   var col = range.getColumn();
 
-  // Col G (7) edits always pass through — handled by handleCheckboxEdit
-  if (col === 7) return false;
+  // Col G (7) and Col I (9) edits always pass through
+  // Col G: handled by handleCheckboxEdit (password flow)
+  // Col I: Release Type is always editable, even on released rows
+  if (col === 7 || col === 9) return false;
 
   var startRow = range.getRow();
   var numRows = range.getNumRows();

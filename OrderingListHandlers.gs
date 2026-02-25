@@ -28,8 +28,6 @@ function handleCheckboxEdit(e) {
     dateCell.setNumberFormat("d/m/yyyy");
     dateCell.setValue(new Date()); // Writes current date object
 
-    // Reset Release Type to Empty (Requirement: Default Empty)
-    sheet.getRange(row, COL_TYPE).setValue("");
 
   }
 
