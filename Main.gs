@@ -248,8 +248,20 @@ function undoLastSync() {
 
   if (result == ui.Button.YES) {
     try {
-      var statusMsg = clearLatestBatch(); // Call Backend
-      ui.alert("Operations Complete", statusMsg, ui.ButtonSet.OK);
+      // Check for released rows first
+      var releaseCheckResult = checkReleasedRowsInLatestBatch();
+      if (releaseCheckResult.releasedCount > 0) {
+        var warn = ui.alert(
+          'Warning: Released Rows Detected',
+          releaseCheckResult.releasedCount + ' row(s) in this batch are currently RELEASED (locked).\n\n' +
+          'They will also be permanently deleted. Are you sure you want to continue?',
+          ui.ButtonSet.YES_NO
+        );
+        if (warn == ui.Button.NO) return;
+      }
+
+      var statusResult = clearLatestBatch(); // Call Backend
+      ui.alert("Operations Complete", statusResult.message, ui.ButtonSet.OK);
     } catch (e) {
       ui.alert("Error", "Undo Failed: " + e.message, ui.ButtonSet.OK);
     }
@@ -269,8 +281,20 @@ function runClearAllBatches() {
 
   if (result == ui.Button.YES) {
     try {
-      var statusMsg = clearAllBatches(); // Call Backend
-      ui.alert("Reset Complete", statusMsg, ui.ButtonSet.OK);
+      // Check for released rows first
+      var releaseCheckResult = checkReleasedRowsInAllBatches();
+      if (releaseCheckResult.releasedCount > 0) {
+        var warn = ui.alert(
+          'Warning: Released Rows Detected',
+          releaseCheckResult.releasedCount + ' row(s) across all batches are currently RELEASED (locked).\n\n' +
+          'They will also be permanently deleted. Are you sure you want to continue?',
+          ui.ButtonSet.YES_NO
+        );
+        if (warn == ui.Button.NO) return;
+      }
+
+      var statusResult = clearAllBatches(); // Call Backend
+      ui.alert("Reset Complete", statusResult.message, ui.ButtonSet.OK);
     } catch (e) {
       ui.alert("Error", "Reset Failed: " + e.message, ui.ButtonSet.OK);
     }

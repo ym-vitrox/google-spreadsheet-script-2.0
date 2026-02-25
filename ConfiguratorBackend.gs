@@ -1465,7 +1465,65 @@ function insertRowsIntoSection(sheet, sectionHeader, items, options) {
     .build();
   typeRange.setDataValidation(rule);
 
+  // Ensure newly written rows are in the unprotected range (not accidentally locked)
+  refreshUnprotectedRanges(sheet);
+
   return itemsNeeded;
+}
+
+/**
+ * PRE-CHECK: Count Released rows in the latest batch (read-only, no deletions).
+ * Called by Main.gs before undoLastSync to decide if a warning dialog is needed.
+ * @returns {{ releasedCount: number }}
+ */
+function checkReleasedRowsInLatestBatch() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("ORDERING LIST");
+  if (!sheet) return { releasedCount: 0 };
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { releasedCount: 0 };
+
+  var batchValues = sheet.getRange(2, BATCH_ID_COL_INDEX, lastRow - 1, 1).getValues();
+  var uniqueIDs = new Set();
+  var validIDs = [];
+  for (var i = 0; i < batchValues.length; i++) {
+    var val = String(batchValues[i][0]).trim();
+    if (val !== "") { uniqueIDs.add(val); validIDs.push({ id: val, rowIndex: i + 2 }); }
+  }
+  if (uniqueIDs.size === 0) return { releasedCount: 0 };
+
+  var latestID = Array.from(uniqueIDs).sort().reverse()[0];
+  var colGValues = sheet.getRange(1, 7, lastRow, 1).getValues();
+  var releasedCount = 0;
+  for (var k = 0; k < validIDs.length; k++) {
+    if (validIDs[k].id === latestID && colGValues[validIDs[k].rowIndex - 1][0] === true) releasedCount++;
+  }
+  return { releasedCount: releasedCount };
+}
+
+/**
+ * PRE-CHECK: Count Released rows across ALL batches (read-only, no deletions).
+ * Called by Main.gs before clearAllBatches to decide if a warning dialog is needed.
+ * @returns {{ releasedCount: number }}
+ */
+function checkReleasedRowsInAllBatches() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName("ORDERING LIST");
+  if (!sheet) return { releasedCount: 0 };
+
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return { releasedCount: 0 };
+
+  var batchValues = sheet.getRange(2, BATCH_ID_COL_INDEX, lastRow - 1, 1).getValues();
+  var colGValues = sheet.getRange(1, 7, lastRow, 1).getValues();
+  var releasedCount = 0;
+  for (var i = 0; i < batchValues.length; i++) {
+    var hasBatchId = String(batchValues[i][0]).trim() !== "";
+    var rowIndex = i + 2; // absolute 1-based row
+    if (hasBatchId && colGValues[rowIndex - 1][0] === true) releasedCount++;
+  }
+  return { releasedCount: releasedCount };
 }
 
 /**
@@ -1511,7 +1569,14 @@ function clearLatestBatch() {
     }
   }
 
-  if (rowsToDelete.length === 0) return "Error: Latest Batch ID found but no rows matched.";
+  if (rowsToDelete.length === 0) return { message: "Error: Latest Batch ID found but no rows matched.", releasedCount: 0 };
+
+  // 3.5. Count Released rows among those to delete
+  var colGValues = sheet.getRange(1, 7, lastRow, 1).getValues();
+  var releasedCount = 0;
+  for (var rr = 0; rr < rowsToDelete.length; rr++) {
+    if (colGValues[rowsToDelete[rr] - 1][0] === true) releasedCount++;
+  }
 
   // 4. Delete Rows (Bottom-Up to avoid index shift issues)
   // We sort descending just to be safe
@@ -1530,7 +1595,11 @@ function clearLatestBatch() {
     console.warn("Failed to reset sync status for batch " + latestID + ": " + err.message);
   }
 
-  return "Cleared Latest Batch (" + latestID + "). Removed " + rowsToDelete.length + " rows. Sync status reset.";
+  // Refresh protection to account for deleted rows
+  refreshUnprotectedRanges(sheet);
+
+  var msg = "Cleared Latest Batch (" + latestID + "). Removed " + rowsToDelete.length + " rows. Sync status reset.";
+  return { message: msg, releasedCount: releasedCount };
 }
 
 /**
@@ -1559,6 +1628,13 @@ function clearAllBatches() {
       if (val !== "") {
         rowsToDelete.push(i + 2); // 1-based index (Header is 1, Data starts 2)
       }
+    }
+
+    // Count Released rows among those to delete
+    var colGValues = sheet.getRange(1, 7, lastRow, 1).getValues();
+    var releasedCount = 0;
+    for (var rr = 0; rr < rowsToDelete.length; rr++) {
+      if (colGValues[rowsToDelete[rr] - 1][0] === true) releasedCount++;
     }
 
     // Delete in Reverse Order
@@ -1638,7 +1714,11 @@ function clearAllBatches() {
     console.warn("Failed to reset all sync status: " + err.message);
   }
 
-  return "Cleared All Batches (Total " + deletedCount + " rows). Repaired sections to " + BUFFER_SIZE + " blank rows. Staging Sync Status Reset.";
+  // Refresh protection to account for deleted rows
+  refreshUnprotectedRanges(sheet);
+
+  var msg = "Cleared All Batches (Total " + deletedCount + " rows). Repaired sections to " + BUFFER_SIZE + " blank rows. Staging Sync Status Reset.";
+  return { message: msg, releasedCount: releasedCount };
 }
 
 /**
