@@ -31,6 +31,9 @@ var CATEGORIZED_MULTI_TOOLS = ["430001-A494"]; // Die Ejector Tooling
 // Add any parent ID here that exists in Tooling Illustration but should not appear in the UI
 var EXCLUDED_BASE_TOOLING_IDS = ["430000-S001"];
 
+// Tooling item IDs (parent or group) that support per-row Qty and "Other (Manual Input)"
+var QTY_AND_MANUAL_TOOLS = ["430001-A380", "430001-A381"];
+
 /**
  * 1. Get List of Modules (ID and Description)
  */
@@ -798,16 +801,16 @@ function saveMachineSetup(payloadRaw) {
 
       for (var p = 0; p < sanitizedTooling.length; p++) {
         var tool = sanitizedTooling[p];
-        writeQueue.push({ level: 1, id: tool.id, desc: tool.desc });
+        writeQueue.push({ level: 1, id: tool.id, desc: tool.desc, qty: "" });
         if (tool.structure) {
           for (var s = 0; s < tool.structure.length; s++) {
             var item = tool.structure[s];
             if (!item.id && !item.desc) continue;
-            if (item.type === 'option') writeQueue.push({ level: 2, id: item.id, desc: item.desc });
+            if (item.type === 'option') writeQueue.push({ level: 2, id: item.id, desc: item.desc, qty: item.qty || "" });
             else if (item.type === 'group' && item.children) {
               for (var c = 0; c < item.children.length; c++) {
                 var child = item.children[c];
-                writeQueue.push({ level: 2, id: child.id, desc: child.desc });
+                writeQueue.push({ level: 2, id: child.id, desc: child.desc, qty: child.qty || "" });
               }
             }
           }
@@ -834,18 +837,24 @@ function saveMachineSetup(payloadRaw) {
       }
 
       // 2. Overwrite Data
-      var outputRange = sheet.getRange(startRow, 3, requiredSlots, 3); // Start at Header Row (C,D,E)
+      var outputRange = sheet.getRange(startRow, 3, requiredSlots, 5); // C–G (5 cols)
       var values = [];
       var fontWeights = [];
       for (var k = 0; k < requiredSlots; k++) {
         if (k < writeQueue.length) {
           var d = writeQueue[k];
-          // Col C = Lvl 1, Col D = Lvl 2
-          values.push([(d.level === 1 ? d.id : ""), (d.level === 2 ? d.id : ""), d.desc || ""]);
-          fontWeights.push(["bold", "bold", "bold"]);
+          // Col C = Lvl 1 ID, Col D = Lvl 2 ID, Col E = desc, Col F = blank, Col G = qty
+          values.push([
+            (d.level === 1 ? d.id : ""),
+            (d.level === 2 ? d.id : ""),
+            d.desc || "",
+            "",
+            (d.qty !== "" && d.qty !== undefined ? d.qty : "")
+          ]);
+          fontWeights.push(["bold", "bold", "bold", "normal", "normal"]);
         } else {
-          values.push(["", "", ""]);
-          fontWeights.push(["normal", "normal", "normal"]);
+          values.push(["", "", "", "", ""]);
+          fontWeights.push(["normal", "normal", "normal", "normal", "normal"]);
         }
       }
       outputRange.setValues(values);
@@ -854,8 +863,8 @@ function saveMachineSetup(payloadRaw) {
       // Merge E:F for each row (Description spans two columns)
       sheet.getRange(startRow, 5, requiredSlots, 2).mergeAcross();
 
-      // Borders
-      sheet.getRange(startRow, 3, requiredSlots, 4).setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
+      // Borders (C–G)
+      sheet.getRange(startRow, 3, requiredSlots, 5).setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.SOLID);
     }
 
     log.push("Success");
@@ -976,12 +985,16 @@ function extractProductionData() {
   try {
     var visionPCRaw = sheet.getRange(2, 3).getValue(); // C2
     if (visionPCRaw) {
-      var vId = String(visionPCRaw).trim();
+      var visionPCStr = String(visionPCRaw).trim();
+      // Handle 'id | desc' format written by the UI configurator
+      var visionPCParts = visionPCStr.split(" | ");
+      var vId = visionPCParts[0].trim();
+      var vDesc = (visionPCParts.length > 1) ? visionPCParts[1].trim() : (masterDict[vId] || "Vision PC (Check REF_DATA)");
       if (vId) {
         payload.PC.push({
           requiresNumbering: true,
           id: vId,
-          desc: masterDict[vId] || "Vision PC (Check REF_DATA)",
+          desc: vDesc,
           qty: 1
         });
       }
@@ -1020,12 +1033,16 @@ function extractProductionData() {
     if (configStartR !== -1 && baseToolingStartR !== -1 && baseToolingStartR > configStartR + 1) {
       var configRange = sheet.getRange(configStartR, 3, baseToolingStartR - configStartR, 1).getValues(); // Col C only (include header row which holds first entry)
       for (var c = 0; c < configRange.length; c++) {
-        var cId = String(configRange[c][0]).trim();
-        if (cId) {
+        var configCellStr = String(configRange[c][0]).trim();
+        if (configCellStr) {
+          // Handle 'id | desc' format written by the UI configurator
+          var configCellParts = configCellStr.split(" | ");
+          var cId = configCellParts[0].trim();
+          var cDesc = (configCellParts.length > 1) ? configCellParts[1].trim() : (masterDict[cId] || "Base Module (Check REF_DATA)");
           payload.CONFIG.push({
             requiresNumbering: true,
             id: cId,
-            desc: masterDict[cId] || "Base Module (Check REF_DATA)",
+            desc: cDesc,
             qty: 1
           });
         }
@@ -1034,7 +1051,7 @@ function extractProductionData() {
 
     // B. EXTRACT BASE MODULE TOOLING -> payload.TOOLING
     if (baseToolingStartR !== -1 && commentStartR !== -1 && commentStartR > baseToolingStartR + 1) {
-      var setupRange = sheet.getRange(baseToolingStartR + 1, 3, commentStartR - baseToolingStartR - 1, 3).getValues(); // C, D, E
+      var setupRange = sheet.getRange(baseToolingStartR + 1, 3, commentStartR - baseToolingStartR - 1, 5).getValues(); // C, D, E, F, G
       var isNewGroup = true; // Default true so orphans get numbered
 
       for (var m = 0; m < setupRange.length; m++) {
@@ -1042,6 +1059,10 @@ function extractProductionData() {
         var idC = String(rowData[0]).trim(); // Parent (Group Header)
         var idD = String(rowData[1]).trim(); // Child (Option)
         var descE = String(rowData[2]).trim(); // Description in E
+        // rowData[3] = Col F (blank/merged)
+        var qtyRaw = rowData[4]; // Col G — per-row qty (may be blank for non-targeted tools)
+        var parsedQty = parseInt(qtyRaw);
+        var finalQty = (!isNaN(parsedQty) && parsedQty > 0) ? parsedQty : 1;
 
         // Signal new group if Parent ID is present
         if (idC !== "") {
@@ -1054,7 +1075,7 @@ function extractProductionData() {
             requiresNumbering: isNewGroup,
             id: idD,
             desc: descE || masterDict[idD] || "Tooling Option",
-            qty: 1
+            qty: finalQty
           });
           // Consume the numbering flag for this group
           if (isNewGroup) isNewGroup = false;
