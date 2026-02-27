@@ -172,18 +172,33 @@ function runMasterSync() {
     var sourceSheet = sourceSS.getSheetByName(sourceTabName);
     if (!sourceSheet) throw new Error("Source tab '" + sourceTabName + "' not found.");
 
+    // --- NEW: Add PX40i Source ---
+    var px40iSpreadsheetId = "1N4Jaz6Q7jjLUa5W6HAou-iye9NZdAdhMB0TdnooVV0E";
+    var px40iSS;
+    try {
+      px40iSS = SpreadsheetApp.openById(px40iSpreadsheetId);
+    } catch (e) {
+      throw new Error("Could not open PX40i Source Spreadsheet. Check ID. " + e.message);
+    }
+
+    // The PX40i source sheet is "BOM MAIN PAGE"
+    var px40iSourceSheet = px40iSS.getSheetByName("BOM MAIN PAGE");
+    if (!px40iSourceSheet) throw new Error("PX40i Source tab 'BOM MAIN PAGE' not found.");
+
     // We only touch REF_DATA
     var destSS = SpreadsheetApp.getActiveSpreadsheet();
     var refSheet = destSS.getSheetByName("REF_DATA");
 
     // A. Update Reference Data (Cols C:AD)
-    updateReferenceData(sourceSS, sourceSheet);
+    // Pass both source sheets to merge the data
+    updateReferenceData(sourceSS, sourceSheet, px40iSourceSheet);
 
     // B. Update Shopping Lists (Cols I:L)
+    // PX30i ONLY as per requirements
     updateShoppingLists(sourceSheet);
 
     // C. PROCESS TOOLING OPTIONS (Cols P:V)
-    processToolingOptions(sourceSS, refSheet);
+    processToolingOptions(sourceSS, refSheet, px40iSS);
 
     // D. PROCESS VISION DATA REMOVED (Cols AF:AK No longer used)
 
@@ -372,7 +387,7 @@ function runClearAllBatches() {
 // 6. SYNC UTILITIES
 // =========================================
 
-function updateReferenceData(sourceSS, sourceSheet) {
+function updateReferenceData(sourceSS, sourceSheet, px40iSourceSheet) {
   var destSS = SpreadsheetApp.getActiveSpreadsheet();
   var refSheetName = "REF_DATA";
   var refSheet = destSS.getSheetByName(refSheetName);
@@ -405,9 +420,20 @@ function updateReferenceData(sourceSS, sourceSheet) {
   refSheet.getRange("A2:D").clearContent();
   refSheet.getRange("W2:AF").clearContent();
 
-  // 3. Fetch New Data
+  // 3. Fetch New Data (PX30i)
   var configItems = fetchRawItems(sourceSheet, "OPTIONAL MODULE: 430001-A712", 6, 7, ["CONFIGURABLE MODULE"]);
   var moduleItems = fetchRawItems(sourceSheet, "CONFIGURABLE MODULE: 430001-A713", 6, 7, ["CONFIGURABLE VISION MODULE"]);
+
+  // 3b. Fetch New Data (PX40i appended)
+  if (px40iSourceSheet) {
+    // For PX40i, Part ID is in Col F (6) and Description starts in Col G (7)
+    var px40iConfigItems = fetchRawItems(px40iSourceSheet, "OPTIONAL M/S MODULE : 430002-A492", 6, 7, ["CONFIGURABLE MODULE"]);
+    var px40iModuleItems = fetchRawItems(px40iSourceSheet, "CONFIGURABLE MODULE", 6, 7, ["CONFIGURABLE VISION MODULE", "TOOLING"]);
+
+    // Append the PX40i arrays to the existing arrays
+    configItems = configItems.concat(px40iConfigItems);
+    moduleItems = moduleItems.concat(px40iModuleItems);
+  }
 
   // 4. Write Data (Start at Row 2)
   if (configItems.length > 0) refSheet.getRange(2, 1, configItems.length, 2).setValues(configItems);
@@ -449,7 +475,7 @@ function updateShoppingLists(sourceSheet) {
   if (pneumaticItems.length > 0) refSheet.getRange(2, 11, pneumaticItems.length, 2).setValues(pneumaticItems);
 }
 
-function processToolingOptions(sourceSS, refSheet) {
+function processToolingOptions(sourceSS, refSheet, px40iSS) {
   var toolingSheet = sourceSS.getSheetByName("Tooling Illustration");
   if (!toolingSheet) return;
 
@@ -471,7 +497,40 @@ function processToolingOptions(sourceSS, refSheet) {
     }
   }
 
+  // --- STEP 1b: FETCH PX40i PARENT DESCRIPTIONS ---
+  if (px40iSS) {
+    var px40iBomSheet = px40iSS.getSheetByName("BOM MAIN PAGE");
+    if (px40iBomSheet) {
+      var lastPx40iBomRow = px40iBomSheet.getLastRow();
+      // PX40i tooling trigger 'TOOLING' is mapped to Cols P (16) and Q (17) 
+      var px40iBomData = px40iBomSheet.getRange(1, 16, lastPx40iBomRow, 2).getValues();
+      var inToolingSection = false;
+
+      for (var pb = 0; pb < px40iBomData.length; pb++) {
+        var pxId = String(px40iBomData[pb][0]).trim();
+        var pxDesc = String(px40iBomData[pb][1]).trim();
+
+        // Start capturing when we hit the trigger
+        if (pxId === "TOOLING") {
+          inToolingSection = true;
+          continue;
+        }
+
+        // Stop capturing if we hit another major section header (heuristic)
+        if (inToolingSection && pxId.indexOf(":") > -1 && pxId !== "TOOLING") {
+          inToolingSection = false; // We left the tooling section
+          break;
+        }
+
+        if (inToolingSection && pxId && pxId !== "Part ID" && pxId !== "---") {
+          parentDescMap[pxId] = pxDesc; // Append to shared map
+        }
+      }
+    }
+  }
+
   // --- STEP 2: PROCESS TOOLING ILLUSTRATION (THE STRUCTURE) ---
+  // A. Process PX30i Tooling Illustration
   var lastRow = toolingSheet.getLastRow();
   var rawData = toolingSheet.getRange(1, 1, lastRow, 8).getValues();
   var databaseOutput = [];
@@ -500,6 +559,45 @@ function processToolingOptions(sourceSS, refSheet) {
     // 4. Processing (Only if valid parent exists)
     if (currentParentID && colF !== "" && colF !== "Part ID") {
       databaseOutput.push([currentParentID, colF, (currentCategory || ""), colH]);
+    }
+  }
+
+  // B. Process PX40i Tooling Illustration
+  if (px40iSS) {
+    var px40iToolingSheet = px40iSS.getSheetByName("4A- Tooling Illustration");
+    if (px40iToolingSheet) {
+      var lastPx40iRow = px40iToolingSheet.getLastRow();
+      // Ensure there is data before grabbing range to avoid errors
+      if (lastPx40iRow > 0) {
+        var px40iRawData = px40iToolingSheet.getRange(1, 1, lastPx40iRow, 8).getValues();
+        var px40iCurrentParentID = null;
+        var px40iCurrentCategory = null;
+
+        for (var pi = 0; pi < px40iRawData.length; pi++) {
+          var pxColA = String(px40iRawData[pi][0]).trim();
+          var pxColB = String(px40iRawData[pi][1]).trim();
+          var pxColF = String(px40iRawData[pi][5]).trim(); // Child ID
+          var pxColH = String(px40iRawData[pi][7]).trim(); // Description
+          var pxMatch = pxColA.match(/\[(.*?)\]/);
+
+          // 1. Parent Detection
+          if (pxMatch && pxMatch[1]) {
+            px40iCurrentParentID = pxMatch[1];
+            px40iCurrentCategory = null;
+          }
+          else if (pxColA !== "" && !pxMatch) {
+            px40iCurrentParentID = null;
+          }
+
+          if (pxColB !== "") { px40iCurrentCategory = pxColB; }
+
+          // 4. Processing
+          if (px40iCurrentParentID && pxColF !== "" && pxColF !== "Part ID") {
+            // Append to the shared databaseOutput
+            databaseOutput.push([px40iCurrentParentID, pxColF, (px40iCurrentCategory || ""), pxColH]);
+          }
+        }
+      }
     }
   }
 
