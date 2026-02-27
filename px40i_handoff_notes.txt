@@ -1,0 +1,20 @@
+# PX40i Implementation Handoff Notes
+
+**Current Progress (What is Done):**
+*   **Master Sync (`REF_DATA`):** The "Refresh -> Sync REF_DATA (DB Only)" process for PX40i is fully implemented and working. The script successfully connects to both the PX30i and the new PX40i external spreadsheets, extracts the required Modules (Cols F, G) and Tooling (Cols P, Q & "4A- Tooling Illustration"), and appends them correctly into the hidden `REF_DATA` sheet.
+
+**Pending Work (What Needs to be Done):**
+The pipeline from the UI Configurator to the `TRIAL-LAYOUT CONFIGURATION` sheet has not been adapted for PX40i yet. Specifically:
+
+*   **Machine Setup (Frontend -> Staging):**
+    *   *Status:* Likely **NO CHANGES NEEDED**.
+    *   *Reasoning:* The mapping logic for the base machine configuration should theoretically be identical to PX30i. 
+*   **Module Part (Frontend -> Staging):**
+    *   *Status:* **NEEDS CHANGES**.
+    *   *Reasoning:* The structure for the Module parts in the PX40i configurator is not the same as PX30i. The new developer will need to review the `ModuleConfigurator_PX40i.html` frontend and the `saveMachineSetup` backend function to ensure the Module data maps correctly into the `TRIAL-LAYOUT CONFIGURATION` sheet.
+*   **Production Sync (Staging -> `ORDERING LIST`):**
+    *   *Status:* **NEEDS CHANGES**.
+    *   *Reasoning:* Because the staging structure (`TRIAL-LAYOUT CONFIGURATION`) will be different from PX30i to accommodate the new PX40i module structures, the extraction logic in `extractProductionData` (which relies on specific vertical anchors and column indices) will need to be adjusted to read the new staging layout properly before injecting it into the `ORDERING LIST`.
+
+**Recommended Immediate Next Step for New Dev:**
+Investigate the "Module Part" section of the UI Configurator, understand its new structural requirements for PX40i, and update the associated JS payload handling in `ModuleConfigurator_PX40i.html` and the GS parsing logic in `saveMachineSetup`.
